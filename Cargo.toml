@@ -1,0 +1,15 @@
+[package]
+name = "rust-mpd-server"
+version = "0.1.0"
+authors = ["Daniel Liljeberg <liljebergxyz@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+rspotify = "0.7"
+toml = "0.5.6"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0.40"
+lazy_static = "1.4.0"
+regex = "1.3.6"
