@@ -1,14 +1,20 @@
-use rspotify::spotify::client::Spotify;
-use rspotify::spotify::model::playlist::{SimplifiedPlaylist};
-use rspotify::spotify::model::artist::SimplifiedArtist;
+use rspotify::client::Spotify;
+use rspotify::model::playlist::{SimplifiedPlaylist};
+use rspotify::model::artist::SimplifiedArtist;
+use async_trait::async_trait;
+use anyhow::{Error, Result};
+use std::sync::Arc;
 
+#[async_trait]
 pub trait MpdCommand {
-    fn execute(&self, command: Option<regex::Captures>) -> Vec<String>;
+    async fn execute(&self, command: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error>;
 }
 
-pub struct StatusCommand { }
+pub struct StatusCommand;
+
+#[async_trait]
 impl MpdCommand for StatusCommand {
-    fn execute(&self, _: Option<regex::Captures>) -> Vec<String> {
+    async fn execute(&self, _: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error> {
         let mut output = vec![];
         output.push("repeat: 0");
         output.push("random: 0");
@@ -19,84 +25,132 @@ impl MpdCommand for StatusCommand {
         output.push("mixrampdb: 0.00000");
         output.push("state: stop");
 
-        output.iter().map(|x| x.to_string()).collect::<Vec<String>>().into()
+        Ok(output.iter().map(|x| x.to_string()).collect::<Vec<String>>().into())
     }
 }
 
-pub struct StatsCommand { }
+pub struct StatsCommand;
+
+#[async_trait]
 impl MpdCommand for StatsCommand {
-    fn execute(&self, _: Option<regex::Captures>) -> Vec<String> {
+    async fn execute(&self, _: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error> {
         let mut output = vec![];
         output.push("uptime: 0");
         output.push("playtime: 0");
 
-        output.iter().map(|x| x.to_string()).collect::<Vec<String>>().into()
+        Ok(output.iter().map(|x| x.to_string()).collect::<Vec<String>>().into())
     }
 }
 
 pub struct ListPlaylistsCommand {
-    pub(crate) spotify: Spotify
+    pub(crate) spotify: Arc<Spotify>
 }
+
+#[async_trait]
 impl MpdCommand for ListPlaylistsCommand {
-    fn execute(&self, _: Option<regex::Captures>)-> Vec<String> {
-        let playlists = self.spotify.current_user_playlists(None, None).unwrap();
+    async fn execute(&self, _: Option<regex::Captures<'_>>)-> Result<Vec<String>, Error> {
+        let playlists_result = self.spotify.current_user_playlists(None, None).await;
         let mut string_builder = vec![];
-        for playlist in playlists.items {
-            string_builder.push(format!("playlist: {}", playlist.name));
-            string_builder.push("Last-Modified: 2020-04-08T17:56:35Z".to_owned());
+
+        match playlists_result {
+            Ok(playlists) => {
+                for playlist in playlists.items {
+                    string_builder.push(format!("playlist: {}", playlist.name));
+                    // We don't know the time :(
+                    string_builder.push("Last-Modified: 1970-01-01T00:00:00Z".to_owned());
+                }
+            },
+            Err(e) => {
+                println!("error fetching playlists: {:?}", e)
+            },
         }
 
-        string_builder
+        Ok(string_builder)
     }
 }
 
 pub struct ListPlaylistInfoCommand {
-    pub(crate) spotify: Spotify
+    pub(crate) spotify: Arc<Spotify>
 }
-
+#[async_trait]
 impl MpdCommand for ListPlaylistInfoCommand {
-    fn execute(&self, args: Option<regex::Captures>) -> Vec<String>{
+    async fn execute(&self, args: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error> {
         let playlist_name = &args.unwrap()[1];
 
-        let simplified_playlist = self.get_playlist_by_name(playlist_name);
+        let simplified_playlist = self.get_playlist_by_name(playlist_name).await;
         let mut string_builder = vec![];
-        if simplified_playlist.is_some() {
-            let playlist = simplified_playlist.unwrap();
-            let playlist_tracks = self.spotify.user_playlist_tracks(
-                &self.spotify.current_user().unwrap().id,
-                &playlist.id,
-                None,
-                None,
-                None,
-                None
-            ).unwrap();
-            for playlist_track in playlist_tracks.items {
-                let track = playlist_track.track;
-                string_builder.push(format!("file: {}", track.external_urls["spotify"]));
-                string_builder.push(format!("Last-Modified: {}", track.album.release_date.unwrap()));
-                string_builder.push(format!("Artist: {}", self.get_artists(track.artists)));
-                string_builder.push(format!("AlbumArtist: {}", self.get_artists(track.album.artists)));
-                string_builder.push(format!("Title: {}", track.name));
-                string_builder.push(format!("Album: {}", track.album.name));
-                let seconds = track.duration_ms / 1000;
-                string_builder.push(format!("Time: {}", seconds));
-                string_builder.push(format!("duration: {}", seconds));
+        match simplified_playlist {
+            Some(playlist) => {
+                let playlist_tracks_result = self.spotify.user_playlist_tracks(
+                    &self.get_current_user_id().await?,
+                    &playlist.id,
+                    None,
+                    None,
+                    None,
+                    None
+                ).await;
+                match playlist_tracks_result {
+                    Ok(playlist_tracks) => {
+                        for playlist_track in playlist_tracks.items
+                        {
+                            match playlist_track.track {
+                                Some(track) => {
+                                    // We don't support local tracks
+                                    if track.is_local {
+                                        break;
+                                    }
+                                    string_builder.push(format!("file: {}", track.external_urls["spotify"]));
+                                    string_builder.push(format!("Last-Modified: {}", track.album.release_date.unwrap()));
+                                    string_builder.push(format!("Artist: {}", self.get_artists(track.artists)));
+                                    string_builder.push(format!("AlbumArtist: {}", self.get_artists(track.album.artists)));
+                                    string_builder.push(format!("Title: {}", track.name));
+                                    string_builder.push(format!("Album: {}", track.album.name));
+                                    let seconds = track.duration_ms / 1000;
+                                    string_builder.push(format!("Time: {}", seconds));
+                                    string_builder.push(format!("duration: {}", seconds));
+                                },
+                                _ => {}
+                            }
+
+                        }
+                    },
+                    Err(_) => ()
+                }
+            },
+            _ => {
+                string_builder.push("ACK".to_owned());
             }
         }
 
-        string_builder
+        Ok(string_builder)
     }
 }
 impl ListPlaylistInfoCommand {
-    fn get_playlist_by_name(&self, name: &str) -> Option<SimplifiedPlaylist> {
-        let playlists = self.spotify.current_user_playlists(None, None).unwrap();
-        for playlist in playlists.items {
-            if playlist.name == name {
-                return Some(playlist)
+    async fn get_playlist_by_name(&self, name: &str) -> Option<SimplifiedPlaylist> {
+        let playlists_result = self.spotify.current_user_playlists(None, None).await;
+        match playlists_result {
+            Ok(playlists) => {
+                for playlist in playlists.items {
+                    if playlist.name == name {
+                        return Some(playlist)
+                    }
+                }
+            },
+            Err(_) => {
+                println!("Unable to get playlist by name")
             }
         }
 
+
         None
+    }
+
+    async fn get_current_user_id(&self) -> Result<String, Error> {
+        let current_user_result = self.spotify.current_user().await;
+        match current_user_result {
+            Ok(current_user) => Ok(current_user.id),
+            Err(e) => Err(Error::from(e.compat()))
+        }
     }
 
     fn get_artists(&self, artists: Vec<SimplifiedArtist>) -> String {

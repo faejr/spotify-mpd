@@ -3,18 +3,20 @@ use std::thread;
 use std::io::{Write, BufReader, BufRead};
 use std::collections::HashMap;
 use crate::mpd::mpd_commands::*;
-use rspotify::spotify::client::Spotify;
+use rspotify::client::Spotify;
 use regex::Regex;
+use anyhow::{Result, Error};
+use std::sync::Arc;
 
 mod mpd_commands;
 
 pub(crate) struct MpdServer<'a> {
     host: &'a str,
-    spotify: Spotify
+    spotify: Arc<Spotify>
 }
 
 impl MpdServer<'static> {
-    pub fn new(host: &'static str, spotify: Spotify) -> Self {
+    pub fn new(host: &'static str, spotify: Arc<Spotify>) -> Self {
         Self {
             host,
             spotify
@@ -29,7 +31,7 @@ impl MpdServer<'static> {
             match stream {
                 Ok(stream) => {
                     println!("New connection: {}", stream.peer_addr().unwrap());
-                    let spotify = self.spotify.clone();
+                    let spotify = Arc::clone(&self.spotify);
                     thread::spawn(move|| {
                         let mut mpd_handler = MpdRequestHandler::new(spotify);
                         mpd_handler.handle_client(stream)
@@ -48,11 +50,11 @@ impl MpdServer<'static> {
 
 struct MpdRequestHandler {
     commands: HashMap<&'static str, Box<dyn MpdCommand + 'static>>,
-    spotify: Spotify
+    spotify: Arc<Spotify>
 }
 
 impl MpdRequestHandler {
-    pub fn new(spotify: Spotify) -> Self{
+    pub fn new(spotify: Arc<Spotify>) -> Self{
         Self {
             spotify,
             commands: HashMap::new()
@@ -63,13 +65,14 @@ impl MpdRequestHandler {
         let mut commands: HashMap<&'static str, Box<dyn MpdCommand>> = HashMap::new();
         commands.insert("status", Box::new(StatusCommand{}));
         commands.insert("stats", Box::new(StatsCommand{}));
-        commands.insert("listplaylists", Box::new(ListPlaylistsCommand{ spotify: self.spotify.clone() }));
-        commands.insert("listplaylistinfo", Box::new(ListPlaylistInfoCommand{ spotify: self.spotify.clone() }));
+        commands.insert("listplaylists", Box::new(ListPlaylistsCommand{ spotify: Arc::clone(&self.spotify) }));
+        commands.insert("listplaylistinfo", Box::new(ListPlaylistInfoCommand{ spotify: Arc::clone(&self.spotify) }));
 
         commands
     }
 
-    fn handle_client(&mut self, mut stream: TcpStream) {
+    #[tokio::main]
+    async fn handle_client(&mut self, mut stream: TcpStream) {
         self.commands = self.commands();
         let welcome = b"OK MPD 0.21.11\n";
         stream.write(welcome).expect("Unable to send OK msg");
@@ -79,6 +82,7 @@ impl MpdRequestHandler {
             let mut response = String::new();
             let mut command_list = vec![];
             reader.read_line(&mut response).expect("could not read");
+
             if response.trim() == "command_list_begin" {
                 while response.trim() != "command_list_end" {
                     response = String::new();
@@ -92,22 +96,25 @@ impl MpdRequestHandler {
             }
 
             if command_list.len() > 0 {
-                self.execute_command(&mut stream, command_list);
+                self.execute_command(&mut stream, command_list).await;
             }
         }
     }
 
-    fn execute_command(&self, stream: &mut TcpStream, command_list: Vec<String>) {
+    async fn execute_command(&self, stream: &mut TcpStream, command_list: Vec<String>) {
         let mut output = vec![];
         for command in command_list {
             println!("Server received {:?}", command);
-            output.extend(self.do_command(command));
+            match self.do_command(command).await {
+                Ok(result) => output.extend(result),
+                _ => {}
+            }
         }
         output.push("OK\n".to_owned());
         stream.write(output.join("\n").as_bytes()).unwrap();
     }
 
-    fn do_command (&self, command: String) -> Vec<String> {
+    async fn do_command (&self, command: String) -> Result<Vec<String>, Error> {
         lazy_static! {
             static ref RE: Regex = Regex::new("\"([^\"]*)\"").unwrap();
         }
@@ -115,7 +122,10 @@ impl MpdRequestHandler {
         for (name, mpd_command) in &self.commands {
             if command.starts_with(name) {
                 let args = RE.captures(&command);
-                return mpd_command.execute(args)
+                return match mpd_command.execute(args).await {
+                    Ok(cmd) => Ok(cmd),
+                    Err(e) => Err(e)
+                }
             }
         }
 
@@ -167,6 +177,6 @@ impl MpdRequestHandler {
             output.push("command: decoders");
         }
 
-        output.iter().map(|x| x.to_string()).collect::<Vec<String>>().into()
+        Ok(output.iter().map(|x| x.to_string()).collect::<Vec<String>>().into())
     }
 }
