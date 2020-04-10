@@ -2,7 +2,6 @@ use rspotify::model::track::{SimplifiedTrack, FullTrack};
 use rspotify::model::album::FullAlbum;
 use serde::{Serialize, Deserialize};
 use chrono::{DateTime, Utc};
-use rspotify::model::artist::SimplifiedArtist;
 
 #[derive(Clone, Deserialize, Serialize)]
 pub struct Track {
@@ -64,10 +63,22 @@ impl Track {
         }
     }
 
-    pub fn duration_str(&self) -> String {
-        let minutes = self.duration / 60_000;
-        let seconds = (self.duration / 1000) % 60;
-        format!("{:02}:{:02}", minutes, seconds)
+    pub fn to_mpd_format(&self, pos: i32) -> Vec<String> {
+        let mut output = vec![];
+
+        output.push(format!("file: {}", self.id.as_ref().unwrap()));
+        output.push(format!("Artist: {}", self.artists.join(";")));
+        output.push(format!("AlbumArtist: {}", self.album_artists.join(";")));
+        output.push(format!("Title: {}", self.title));
+        output.push(format!("Album: {}", self.album));
+        output.push(format!("Track: {}", self.track_number));
+        output.push(format!("Date: {}", self.date));
+        output.push(format!("Time: {}", self.duration / 1000));
+        output.push(format!("duration: {}", self.duration / 1000));
+        output.push(format!("Pos: {}", pos));
+        output.push(format!("Id: {}", pos));
+
+        output
     }
 }
 

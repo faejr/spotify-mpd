@@ -9,8 +9,8 @@ extern crate strum;
 extern crate strum_macros;
 
 use crate::spotify::{new_spotify_client, get_token_auto, SCOPES};
-use crate::config::{Config, SpotifyConfig};
-use rspotify::oauth2::{SpotifyOAuth, SpotifyClientCredentials};
+use crate::config::Config;
+use rspotify::oauth2::SpotifyOAuth;
 use anyhow::Result;
 use tokio_core::reactor::Core;
 use librespot::core::authentication::Credentials;

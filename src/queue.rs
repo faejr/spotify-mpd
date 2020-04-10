@@ -4,14 +4,16 @@ use crate::respot::{PlayerCommand, PlayerEvent};
 use std::cmp::Ordering;
 use futures::task::{Context, Poll};
 use std::pin::Pin;
-use std::time::SystemTime;
 use tokio_core::reactor::Core;
+use std::time::{Duration, SystemTime};
 
 pub struct Queue {
     pub queue: Arc<RwLock<Vec<Track>>>,
     current_track: RwLock<Option<usize>>,
     command_sender: Arc<Mutex<std::sync::mpsc::Sender<PlayerCommand>>>,
     status: RwLock<PlayerEvent>,
+    elapsed: RwLock<Option<Duration>>,
+    since: RwLock<Option<SystemTime>>
 }
 
 impl Queue {
@@ -21,6 +23,8 @@ impl Queue {
             current_track: RwLock::new(None),
             command_sender,
             status: RwLock::new(PlayerEvent::Stopped),
+            elapsed: RwLock::new(None),
+            since: RwLock::new(None),
         }
     }
 
@@ -57,6 +61,13 @@ impl Queue {
                     None
                 }
             }
+            None => None,
+        }
+    }
+
+    pub fn get_current_index(&self) -> Option<usize> {
+        match *self.current_track.read().unwrap() {
+            Some(mut index) => Some(index),
             None => None,
         }
     }
@@ -131,31 +142,12 @@ impl Queue {
     pub fn clear(&self) {
         self.stop();
 
-        let mut q = self.queue.write().unwrap();
-        q.clear();
+        let mut queue = self.queue.write().unwrap();
+        queue.clear();
     }
 
     pub fn len(&self) -> usize {
         self.queue.read().unwrap().len()
-    }
-
-    pub fn shift(&self, from: usize, to: usize) {
-        let mut queue = self.queue.write().unwrap();
-        let item = queue.remove(from);
-        queue.insert(to, item);
-
-        // if the currently playing track is affected by the shift, update its
-        // index
-        let mut current = self.current_track.write().unwrap();
-        if let Some(index) = *current {
-            if index == from {
-                current.replace(to);
-            } else if index == to && from > index {
-                current.replace(to + 1);
-            } else if index == to && from < index {
-                current.replace(to - 1);
-            }
-        }
     }
 
     pub fn play(&self, mut index: usize) {
@@ -169,8 +161,14 @@ impl Queue {
         }
     }
 
-    pub fn toggleplayback(&self) {
-        // self.respot.toggleplayback();
+    pub fn toggle_playback(&self) {
+        if self.get_status() == PlayerEvent::Playing {
+            debug!("Dispatching pause");
+            self.dispatch(PlayerCommand::Pause);
+        } else {
+            debug!("Dispatching play");
+            self.dispatch(PlayerCommand::Play);
+        }
     }
 
     pub fn stop(&self) {
@@ -179,11 +177,11 @@ impl Queue {
         self.dispatch(PlayerCommand::Stop);
     }
 
-    pub fn next(&self, manual: bool) {
+    pub fn next(&self) {
         if let Some(index) = self.next_index() {
             self.play(index);
         } else {
-            self.dispatch(PlayerCommand::Stop);
+            self.stop();
         }
     }
 
@@ -203,11 +201,50 @@ impl Queue {
 
     pub fn get_duration(&self) -> u32 {
         if let Some(ref track) = self.get_current() {
-            info!("{}", track.duration / 1000);
             return track.duration / 1000
         }
 
         0
+    }
+
+    pub fn get_current_progress(&self) -> Duration {
+        self.get_elapsed().unwrap_or(Duration::from_secs(0))
+            + self
+            .get_since()
+            .map(|t| t.elapsed().unwrap())
+            .unwrap_or(Duration::from_secs(0))
+    }
+
+    fn set_elapsed(&self, new_elapsed: Option<Duration>) {
+        let mut elapsed = self
+            .elapsed
+            .write()
+            .expect("could not get write lock on elapsed time");
+        *elapsed = new_elapsed;
+    }
+
+    fn get_elapsed(&self) -> Option<Duration> {
+        let elapsed = self
+            .elapsed
+            .read()
+            .expect("could not get read lock on elapsed time");
+        *elapsed
+    }
+
+    fn set_since(&self, new_since: Option<SystemTime>) {
+        let mut since = self
+            .since
+            .write()
+            .expect("could not get write lock on since time");
+        *since = new_since;
+    }
+
+    fn get_since(&self) -> Option<SystemTime> {
+        let since = self
+            .since
+            .read()
+            .expect("could not get read lock on since time");
+        *since
     }
 
     fn dispatch (&self, command: PlayerCommand) {
@@ -230,16 +267,19 @@ impl QueueWorker {
     fn handle_event(&self, event: PlayerEvent) {
         match event {
             PlayerEvent::Paused => {
-                //self.queue.set_elapsed(Some(self.get_current_progress()));
-                //self.set_since(None);
+                self.queue.set_elapsed(Some(self.queue.get_current_progress()));
+                self.queue.set_since(None);
             }
             PlayerEvent::Playing => {
-                //self.set_since(Some(SystemTime::now()));
+                self.queue.set_since(Some(SystemTime::now()));
                 info!("Received a playing event!");
             }
-            PlayerEvent::Stopped | PlayerEvent::FinishedTrack => {
-                //self.set_elapsed(None);
-                //self.set_since(None);
+            PlayerEvent::FinishedTrack => {
+                self.queue.next();
+            },
+            PlayerEvent::Stopped => {
+                self.queue.set_elapsed(None);
+                self.queue.set_since(None);
             }
         }
 

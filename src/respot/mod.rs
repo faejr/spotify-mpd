@@ -4,7 +4,6 @@ use tokio_core::reactor::Core;
 use librespot::playback::config::PlayerConfig;
 use librespot::playback::audio_backend;
 use futures_01::{Future, Async, Stream};
-use core::task::Poll;
 use librespot::core::session::Session;
 use std::thread;
 use tokio_signal::IoStream;
@@ -19,7 +18,8 @@ pub enum PlayerCommand {
     NextTrack,
     PreviousTrack,
     Stop,
-    Play
+    Play,
+    Pause
 }
 
 #[derive(Clone, Debug, PartialEq)]

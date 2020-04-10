@@ -73,10 +73,16 @@ impl MpdRequestHandler {
         commands.insert("status", Box::new(StatusCommand::new(Arc::clone(&self.queue))));
         commands.insert("stats", Box::new(StatsCommand{}));
         commands.insert("listplaylists", Box::new(ListPlaylistsCommand{ spotify: Arc::clone(&self.spotify) }));
-        commands.insert("listplaylistinfo", Box::new(ListPlaylistInfoCommand{ spotify: Arc::clone(&self.spotify) }));
+        commands.insert("listplaylistinfo", Box::new(ListPlaylistInfoCommand::new(Arc::clone(&self.spotify))));
         commands.insert("add", Box::new(AddCommand::new(Arc::clone(&self.queue), Arc::clone(&self.spotify))));
         commands.insert("play", Box::new(PlayCommand::new(Arc::clone(&self.queue))));
+        commands.insert("playid", Box::new(PlayCommand::new(Arc::clone(&self.queue))));
+        commands.insert("pause", Box::new(PauseCommand::new(Arc::clone(&self.queue))));
+        commands.insert("next", Box::new(NextCommand::new(Arc::clone(&self.queue))));
+        commands.insert("prev", Box::new(PrevCommand::new(Arc::clone(&self.queue))));
+        commands.insert("clear", Box::new(ClearCommand::new(Arc::clone(&self.queue))));
         commands.insert("playlistinfo", Box::new(PlaylistInfoCommand::new(Arc::clone(&self.queue))));
+        commands.insert("currentsong", Box::new(CurrentSongCommand::new(Arc::clone(&self.queue))));
 
         commands
     }

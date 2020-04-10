@@ -25,27 +25,6 @@ impl StatusCommand {
         }
     }
 }
-/*
-volume: 100
-repeat: 0
-random: 0
-single: 0
-consume: 0
-playlist: 4
-playlistlength: 1
-mixrampdb: 0.000000
-state: play
-song: 0
-songid: 3
-time: 6:226
-elapsed: 6.078
-bitrate: 224
-duration: 225.515
-audio: 44100:24:2
-nextsong: 1
-nextsongid: 2
-OK
-*/
 #[async_trait]
 impl MpdCommand for StatusCommand {
     async fn execute(&self, _: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error> {
@@ -56,24 +35,26 @@ impl MpdCommand for StatusCommand {
         output.push("single: 0");
         output.push("consume: 0");
         output.push("playlist: 1");
-        output.push("playlistlength: 1");
         output.push("mixrampdb: 0.00000");
 
         let mut output_strings: Vec<String> = output.iter().map(|x| x.to_string()).collect::<Vec<String>>().into();
         let status = self.queue.get_status();
+        let playlist_length = self.queue.len();
+        output_strings.push(format!("playlistlength: {}", playlist_length));
         output_strings.push(format!("state: {}", status.to_string()));
-        if status == PlayerEvent::Playing {
-            output_strings.push(format!("song: {}", 0));
-            output_strings.push(format!("duration: {}", self.queue.get_duration()));
-            output_strings.push(format!("elapsed: {}", 10));
-            /*
-            elapsed: 6.078
-            bitrate: 224
-            duration: 225.515
-            audio: 44100:24:2
-            */
+        if status == PlayerEvent::Playing || status == PlayerEvent::Paused {
+            if let Some(songid) = self.queue.get_current_index() {
+                output_strings.push(format!("song: {}", songid));
+                output_strings.push(format!("songid: {}", songid));
+            }
+            let elapsed = self.queue.get_current_progress();
+            let duration = self.queue.get_duration();
+            output_strings.push(format!("time: {}:{}", elapsed.as_secs(), duration));
+            output_strings.push(format!("elapsed: {}", elapsed.as_secs_f32()));
+            output_strings.push(format!("duration: {}", duration));
+            output_strings.push("audio: 44100:24:2".to_owned());
+            output_strings.push("bitrate: 160".to_owned());
         }
-        println!("{:?}", output_strings.as_slice());
 
         Ok(output_strings)
     }
@@ -120,9 +101,16 @@ impl MpdCommand for ListPlaylistsCommand {
 }
 
 pub struct ListPlaylistInfoCommand {
-    pub(crate) spotify: Arc<Spotify>
+    spotify: Arc<Spotify>
 }
-// TODO: Walk through each track page to find all songs
+impl ListPlaylistInfoCommand {
+    pub fn new(spotify: Arc<Spotify>) -> Self {
+        Self {
+            spotify
+        }
+    }
+}
+// TODO: Walk through each track page to find all songs in a playlist
 #[async_trait]
 impl MpdCommand for ListPlaylistInfoCommand {
     async fn execute(&self, args: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error> {
@@ -261,6 +249,82 @@ impl MpdCommand for PlayCommand {
     }
 }
 
+pub struct PauseCommand {
+    queue: Arc<Queue>
+}
+impl PauseCommand {
+    pub fn new(queue: Arc<Queue>) -> Self {
+        Self {
+            queue
+        }
+    }
+}
+#[async_trait]
+impl MpdCommand for PauseCommand {
+    async fn execute(&self, _: Option<Captures<'_>>) -> Result<Vec<String>, Error> {
+        self.queue.toggle_playback();
+
+        Ok(vec![])
+    }
+}
+
+pub struct NextCommand {
+    queue: Arc<Queue>
+}
+impl NextCommand {
+    pub fn new(queue: Arc<Queue>) -> Self {
+        Self {
+            queue
+        }
+    }
+}
+#[async_trait]
+impl MpdCommand for NextCommand {
+    async fn execute(&self, _: Option<Captures<'_>>) -> Result<Vec<String>, Error> {
+        self.queue.next();
+
+        Ok(vec![])
+    }
+}
+
+pub struct PrevCommand {
+    queue: Arc<Queue>
+}
+impl PrevCommand {
+    pub fn new(queue: Arc<Queue>) -> Self {
+        Self {
+            queue
+        }
+    }
+}
+#[async_trait]
+impl MpdCommand for PrevCommand {
+    async fn execute(&self, _: Option<Captures<'_>>) -> Result<Vec<String>, Error> {
+        self.queue.previous();
+
+        Ok(vec![])
+    }
+}
+
+pub struct ClearCommand {
+    queue: Arc<Queue>
+}
+impl ClearCommand {
+    pub fn new(queue: Arc<Queue>) -> Self {
+        Self {
+            queue
+        }
+    }
+}
+#[async_trait]
+impl MpdCommand for ClearCommand {
+    async fn execute(&self, _: Option<Captures<'_>>) -> Result<Vec<String>, Error> {
+        self.queue.clear();
+
+        Ok(vec![])
+    }
+}
+
 pub struct PlaylistInfoCommand {
     queue: Arc<Queue>
 }
@@ -276,17 +340,7 @@ impl MpdCommand for PlaylistInfoCommand {
         let queue = self.queue.queue.read().unwrap();
         let mut pos = 0;
         for track in (*queue).clone() {
-            output.push(format!("file: {}", track.id.unwrap()));
-            output.push(format!("Artist: {}", track.artists.join(";")));
-            output.push(format!("AlbumArtist: {}", track.album_artists.join(";")));
-            output.push(format!("Title: {}", track.title));
-            output.push(format!("Album: {}", track.album));
-            output.push(format!("Track: {}", track.track_number));
-            output.push(format!("Date: {}", track.date));
-            output.push(format!("Time: {}", track.duration / 1000));
-            output.push(format!("duration: {}", track.duration / 1000));
-            output.push(format!("Pos: {}", pos));
-            output.push(format!("Id: {}", pos));
+            output.extend(track.to_mpd_format(pos));
             pos = pos + 1;
         }
 
@@ -294,4 +348,24 @@ impl MpdCommand for PlaylistInfoCommand {
     }
 }
 
-// SetVolCommand ?
+pub struct CurrentSongCommand {
+    queue: Arc<Queue>
+}
+impl CurrentSongCommand {
+    pub fn new(queue: Arc<Queue>) -> Self {
+        Self { queue }
+    }
+}
+#[async_trait]
+impl MpdCommand for CurrentSongCommand {
+    async fn execute(&self, args: Option<Captures<'_>>) -> Result<Vec<String>, Error> {
+        let mut output = vec![];
+        if let Some(current_track) = self.queue.get_current() {
+            output = current_track.to_mpd_format(0);
+        }
+
+        Ok(output)
+    }
+}
+
+// TODO: SetVolCommand

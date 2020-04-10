@@ -37,6 +37,12 @@ impl PlayerWorker {
                 self.active = true;
                 info!("Starting playback");
             },
+            PlayerCommand::Pause => {
+                self.player.pause();
+                self.event_sender.send(PlayerEvent::Paused).unwrap();
+                self.active = false;
+                info!("pausing playback");
+            },
             PlayerCommand::Stop => {
                 self.player.stop();
                 self.active = false;
