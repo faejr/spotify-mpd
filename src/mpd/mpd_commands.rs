@@ -8,13 +8,23 @@ use crate::queue::Queue;
 use regex::Captures;
 use crate::track::Track;
 use std::str::FromStr;
+use crate::respot::PlayerEvent;
 
 #[async_trait]
 pub trait MpdCommand {
     async fn execute(&self, args: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error>;
 }
 
-pub struct StatusCommand;
+pub struct StatusCommand {
+    queue: Arc<Queue>
+}
+impl StatusCommand {
+    pub fn new(queue: Arc<Queue>) -> Self {
+        Self {
+            queue
+        }
+    }
+}
 /*
 volume: 100
 repeat: 0
@@ -32,6 +42,8 @@ elapsed: 6.078
 bitrate: 224
 duration: 225.515
 audio: 44100:24:2
+nextsong: 1
+nextsongid: 2
 OK
 */
 #[async_trait]
@@ -44,11 +56,26 @@ impl MpdCommand for StatusCommand {
         output.push("single: 0");
         output.push("consume: 0");
         output.push("playlist: 1");
-        output.push("playlistlength: 0");
+        output.push("playlistlength: 1");
         output.push("mixrampdb: 0.00000");
-        output.push("state: stop");
 
-        Ok(output.iter().map(|x| x.to_string()).collect::<Vec<String>>().into())
+        let mut output_strings: Vec<String> = output.iter().map(|x| x.to_string()).collect::<Vec<String>>().into();
+        let status = self.queue.get_status();
+        output_strings.push(format!("state: {}", status.to_string()));
+        if status == PlayerEvent::Playing {
+            output_strings.push(format!("song: {}", 0));
+            output_strings.push(format!("duration: {}", self.queue.get_duration()));
+            output_strings.push(format!("elapsed: {}", 10));
+            /*
+            elapsed: 6.078
+            bitrate: 224
+            duration: 225.515
+            audio: 44100:24:2
+            */
+        }
+        println!("{:?}", output_strings.as_slice());
+
+        Ok(output_strings)
     }
 }
 
@@ -231,6 +258,39 @@ impl MpdCommand for PlayCommand {
         self.queue.play(index);
 
         Ok(vec![])
+    }
+}
+
+pub struct PlaylistInfoCommand {
+    queue: Arc<Queue>
+}
+impl PlaylistInfoCommand {
+    pub fn new(queue: Arc<Queue>) -> Self {
+        Self { queue }
+    }
+}
+#[async_trait]
+impl MpdCommand for PlaylistInfoCommand {
+    async fn execute(&self, args: Option<Captures<'_>>) -> Result<Vec<String>, Error> {
+        let mut output = vec![];
+        let queue = self.queue.queue.read().unwrap();
+        let mut pos = 0;
+        for track in (*queue).clone() {
+            output.push(format!("file: {}", track.id.unwrap()));
+            output.push(format!("Artist: {}", track.artists.join(";")));
+            output.push(format!("AlbumArtist: {}", track.album_artists.join(";")));
+            output.push(format!("Title: {}", track.title));
+            output.push(format!("Album: {}", track.album));
+            output.push(format!("Track: {}", track.track_number));
+            output.push(format!("Date: {}", track.date));
+            output.push(format!("Time: {}", track.duration / 1000));
+            output.push(format!("duration: {}", track.duration / 1000));
+            output.push(format!("Pos: {}", pos));
+            output.push(format!("Id: {}", pos));
+            pos = pos + 1;
+        }
+
+        Ok(output)
     }
 }
 

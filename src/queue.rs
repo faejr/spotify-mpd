@@ -2,22 +2,35 @@ use std::sync::{Arc, RwLock, Mutex};
 use crate::track::Track;
 use crate::respot::{PlayerCommand, PlayerEvent};
 use std::cmp::Ordering;
+use futures::task::{Context, Poll};
+use std::pin::Pin;
+use std::time::SystemTime;
+use tokio_core::reactor::Core;
 
 pub struct Queue {
     pub queue: Arc<RwLock<Vec<Track>>>,
     current_track: RwLock<Option<usize>>,
     command_sender: Arc<Mutex<std::sync::mpsc::Sender<PlayerCommand>>>,
-    event_receiver: Arc<Mutex<std::sync::mpsc::Receiver<PlayerEvent>>>
+    status: RwLock<PlayerEvent>,
 }
 
 impl Queue {
-    pub fn new(command_sender: Arc<Mutex<std::sync::mpsc::Sender<PlayerCommand>>>, event_receiver: Arc<Mutex<std::sync::mpsc::Receiver<PlayerEvent>>>) -> Self {
+    pub fn new(command_sender: Arc<Mutex<std::sync::mpsc::Sender<PlayerCommand>>>) -> Self {
         Self {
             queue: Arc::new(RwLock::new(Vec::new())),
             current_track: RwLock::new(None),
             command_sender,
-            event_receiver
+            status: RwLock::new(PlayerEvent::Stopped),
         }
+    }
+
+    pub fn start_worker(queue: Arc<Queue>, event_receiver: std::sync::mpsc::Receiver<PlayerEvent>) {
+        std::thread::spawn(move || {
+            let mut core = Core::new().unwrap();
+            let queue_worker = QueueWorker::new(queue, event_receiver);
+
+            core.run(futures::compat::Compat::new(queue_worker)).unwrap();
+        });
     }
 
     pub fn next_index(&self) -> Option<usize> {
@@ -182,7 +195,75 @@ impl Queue {
         }
     }
 
+    pub fn get_status(&self) -> PlayerEvent {
+        let status = self.status.read().expect("unable to get read lock");
+
+        return (*status).clone();
+    }
+
+    pub fn get_duration(&self) -> u32 {
+        if let Some(ref track) = self.get_current() {
+            info!("{}", track.duration / 1000);
+            return track.duration / 1000
+        }
+
+        0
+    }
+
     fn dispatch (&self, command: PlayerCommand) {
         self.command_sender.lock().unwrap().send(command).unwrap();
+    }
+}
+
+struct QueueWorker {
+    queue: Arc<Queue>,
+    event_receiver: std::sync::mpsc::Receiver<PlayerEvent>,
+}
+impl QueueWorker {
+    fn new(queue: Arc<Queue>, event_receiver: std::sync::mpsc::Receiver<PlayerEvent>) -> Self {
+        Self {
+            queue,
+            event_receiver
+        }
+    }
+
+    fn handle_event(&self, event: PlayerEvent) {
+        match event {
+            PlayerEvent::Paused => {
+                //self.queue.set_elapsed(Some(self.get_current_progress()));
+                //self.set_since(None);
+            }
+            PlayerEvent::Playing => {
+                //self.set_since(Some(SystemTime::now()));
+                info!("Received a playing event!");
+            }
+            PlayerEvent::Stopped | PlayerEvent::FinishedTrack => {
+                //self.set_elapsed(None);
+                //self.set_since(None);
+            }
+        }
+
+        let mut status = self.queue.status.write().expect("unable to get write lock");
+        *status = event;
+    }
+}
+
+impl futures::Future for QueueWorker {
+    type Output = Result<(), ()>;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> futures::task::Poll<Self::Output> {
+        loop {
+            let mut progress = false;
+
+            if let Ok(event) = self.event_receiver.recv() {
+                self.handle_event(event);
+
+                progress = true;
+            }
+
+            if !progress {
+                return Poll::Pending;
+            }
+        }
     }
 }

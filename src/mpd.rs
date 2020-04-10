@@ -70,12 +70,13 @@ impl MpdRequestHandler {
 
     fn commands(&self) -> HashMap<&'static str, Box<dyn MpdCommand>> {
         let mut commands: HashMap<&'static str, Box<dyn MpdCommand>> = HashMap::new();
-        commands.insert("status", Box::new(StatusCommand{}));
+        commands.insert("status", Box::new(StatusCommand::new(Arc::clone(&self.queue))));
         commands.insert("stats", Box::new(StatsCommand{}));
         commands.insert("listplaylists", Box::new(ListPlaylistsCommand{ spotify: Arc::clone(&self.spotify) }));
         commands.insert("listplaylistinfo", Box::new(ListPlaylistInfoCommand{ spotify: Arc::clone(&self.spotify) }));
         commands.insert("add", Box::new(AddCommand::new(Arc::clone(&self.queue), Arc::clone(&self.spotify))));
         commands.insert("play", Box::new(PlayCommand::new(Arc::clone(&self.queue))));
+        commands.insert("playlistinfo", Box::new(PlaylistInfoCommand::new(Arc::clone(&self.queue))));
 
         commands
     }

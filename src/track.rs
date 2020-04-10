@@ -2,6 +2,7 @@ use rspotify::model::track::{SimplifiedTrack, FullTrack};
 use rspotify::model::album::FullAlbum;
 use serde::{Serialize, Deserialize};
 use chrono::{DateTime, Utc};
+use rspotify::model::artist::SimplifiedArtist;
 
 #[derive(Clone, Deserialize, Serialize)]
 pub struct Track {
@@ -18,6 +19,7 @@ pub struct Track {
     pub cover_url: String,
     pub url: String,
     pub added_at: Option<DateTime<Utc>>,
+    pub date: String
 }
 
 impl Track {
@@ -58,6 +60,7 @@ impl Track {
             cover_url,
             url: track.uri.clone(),
             added_at: None,
+            date: "".to_owned()
         }
     }
 
@@ -93,6 +96,8 @@ impl From<&FullTrack> for Track {
             None => "".to_owned(),
         };
 
+        let date = track.album.release_date.to_owned().unwrap();
+
         Self {
             id: track.id.clone(),
             title: track.name.clone(),
@@ -107,6 +112,7 @@ impl From<&FullTrack> for Track {
             cover_url,
             url: track.uri.clone(),
             added_at: None,
+            date
         }
     }
 }

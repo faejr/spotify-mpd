@@ -51,9 +51,9 @@ async fn main() -> Result<()> {
             let (command_sender, command_receiver) = std::sync::mpsc::channel::<PlayerCommand>();
             let (event_sender, event_receiver) = std::sync::mpsc::channel::<PlayerEvent>();
             let command_sender_mutex = Arc::new(Mutex::new(command_sender));
-            let event_receiver_mutex = Arc::new(Mutex::new(event_receiver));
 
-            let queue = Arc::new(Queue::new(command_sender_mutex, event_receiver_mutex));
+            let queue = Arc::new(Queue::new(command_sender_mutex));
+            Queue::start_worker(queue.clone(), event_receiver);
 
             let session_config = SessionConfig::default();
             let credentials = Credentials::with_password(spotify_config.username.as_ref().unwrap().to_owned(), spotify_config.password.as_ref().unwrap().to_owned());
