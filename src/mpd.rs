@@ -75,6 +75,7 @@ impl MpdRequestHandler {
         commands.insert("listplaylists", Box::new(ListPlaylistsCommand{ spotify: Arc::clone(&self.spotify) }));
         commands.insert("listplaylistinfo", Box::new(ListPlaylistInfoCommand{ spotify: Arc::clone(&self.spotify) }));
         commands.insert("add", Box::new(AddCommand::new(Arc::clone(&self.queue), Arc::clone(&self.spotify))));
+        commands.insert("play", Box::new(PlayCommand::new(Arc::clone(&self.queue))));
 
         commands
     }
@@ -143,12 +144,17 @@ impl MpdRequestHandler {
 
     async fn do_command (&self, command: String) -> Result<Vec<String>, Error> {
         lazy_static! {
-            static ref RE: Regex = Regex::new("\"([^\"]*)\"").unwrap();
+            static ref RE: Regex = Regex::new("\\s+\"?([^\"]*)\"?").unwrap();
         }
 
+        let command_name = command
+            .split_whitespace()
+            .next()
+            .unwrap_or("");
+        println!("Command name: {}", command_name);
         for (name, mpd_command) in &self.commands {
-            if command.starts_with(name) {
-                let args = RE.captures(&command);
+            if command_name.eq(*name) {
+                let args: Option<regex::Captures<'_>> = RE.captures(&command);
                 return match mpd_command.execute(args).await {
                     Ok(cmd) => Ok(cmd),
                     Err(e) => Err(e)

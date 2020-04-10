@@ -11,6 +11,7 @@ pub struct Config {
 #[derive(Debug, Deserialize)]
 pub struct SpotifyConfig {
     pub client_id: Option<String>,
+    pub client_secret: Option<String>,
     pub port: Option<u16>,
     pub username: Option<String>,
     pub password: Option<String>

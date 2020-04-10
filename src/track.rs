@@ -1,4 +1,4 @@
-use rspotify::model::track::SimplifiedTrack;
+use rspotify::model::track::{SimplifiedTrack, FullTrack};
 use rspotify::model::album::FullAlbum;
 use serde::{Serialize, Deserialize};
 use chrono::{DateTime, Utc};
@@ -65,5 +65,48 @@ impl Track {
         let minutes = self.duration / 60_000;
         let seconds = (self.duration / 1000) % 60;
         format!("{:02}:{:02}", minutes, seconds)
+    }
+}
+
+impl From<&FullTrack> for Track {
+    fn from(track: &FullTrack) -> Self {
+        let artists = track
+            .artists
+            .iter()
+            .map(|ref artist| artist.name.clone())
+            .collect::<Vec<String>>();
+        let artist_ids = track
+            .artists
+            .iter()
+            .filter(|a| a.id.is_some())
+            .map(|ref artist| artist.id.clone().unwrap())
+            .collect::<Vec<String>>();
+        let album_artists = track
+            .album
+            .artists
+            .iter()
+            .map(|ref artist| artist.name.clone())
+            .collect::<Vec<String>>();
+
+        let cover_url = match track.album.images.get(0) {
+            Some(image) => image.url.clone(),
+            None => "".to_owned(),
+        };
+
+        Self {
+            id: track.id.clone(),
+            title: track.name.clone(),
+            track_number: track.track_number,
+            disc_number: track.disc_number,
+            duration: track.duration_ms,
+            artists,
+            artist_ids,
+            album: track.album.name.clone(),
+            album_id: track.album.id.clone(),
+            album_artists,
+            cover_url,
+            url: track.uri.clone(),
+            added_at: None,
+        }
     }
 }

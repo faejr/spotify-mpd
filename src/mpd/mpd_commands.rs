@@ -6,6 +6,8 @@ use anyhow::{Error, Result};
 use std::sync::Arc;
 use crate::queue::Queue;
 use regex::Captures;
+use crate::track::Track;
+use std::str::FromStr;
 
 #[async_trait]
 pub trait MpdCommand {
@@ -13,11 +15,30 @@ pub trait MpdCommand {
 }
 
 pub struct StatusCommand;
-
+/*
+volume: 100
+repeat: 0
+random: 0
+single: 0
+consume: 0
+playlist: 4
+playlistlength: 1
+mixrampdb: 0.000000
+state: play
+song: 0
+songid: 3
+time: 6:226
+elapsed: 6.078
+bitrate: 224
+duration: 225.515
+audio: 44100:24:2
+OK
+*/
 #[async_trait]
 impl MpdCommand for StatusCommand {
     async fn execute(&self, _: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error> {
         let mut output = vec![];
+        output.push("volume: 100");
         output.push("repeat: 0");
         output.push("random: 0");
         output.push("single: 0");
@@ -171,9 +192,15 @@ pub struct AddCommand {
 impl MpdCommand for AddCommand {
     async fn execute(&self, args: Option<Captures<'_>>) -> Result<Vec<String>, Error> {
         let track_id = &args.unwrap()[1];
-        let track_result = self.spotify.track(track_id).await?;
-        // This is a full track, need to fix that
-        info!("{}", track_id);
+        let track_result = self.spotify.track(track_id).await;
+        match track_result {
+            Ok(full_track) => {
+                let track = Track::from(&full_track);
+                self.queue.append(&track);
+            },
+            Err(e) => return Err(Error::from(e.compat()))
+        }
+        debug!("{}", track_id);
 
         Ok(vec![])
     }
@@ -186,3 +213,25 @@ impl AddCommand {
         }
     }
 }
+
+pub struct PlayCommand {
+    queue: Arc<Queue>
+}
+impl PlayCommand {
+    pub fn new(queue: Arc<Queue>) -> Self {
+        Self {
+            queue
+        }
+    }
+}
+#[async_trait]
+impl MpdCommand for PlayCommand {
+    async fn execute(&self, args: Option<Captures<'_>>) -> Result<Vec<String>, Error> {
+        let index = usize::from_str(&args.unwrap()[1]).unwrap();
+        self.queue.play(index);
+
+        Ok(vec![])
+    }
+}
+
+// SetVolCommand ?

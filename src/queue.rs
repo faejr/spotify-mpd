@@ -1,20 +1,22 @@
 use std::sync::{Arc, RwLock, Mutex};
 use crate::track::Track;
-use crate::respot::{Respot, PlayerCommand};
+use crate::respot::{PlayerCommand, PlayerEvent};
 use std::cmp::Ordering;
 
 pub struct Queue {
     pub queue: Arc<RwLock<Vec<Track>>>,
     current_track: RwLock<Option<usize>>,
-    command_sender: Arc<Mutex<std::sync::mpsc::Sender<PlayerCommand>>>
+    command_sender: Arc<Mutex<std::sync::mpsc::Sender<PlayerCommand>>>,
+    event_receiver: Arc<Mutex<std::sync::mpsc::Receiver<PlayerEvent>>>
 }
 
 impl Queue {
-    pub fn new(command_sender: Arc<Mutex<std::sync::mpsc::Sender<PlayerCommand>>>) -> Self {
+    pub fn new(command_sender: Arc<Mutex<std::sync::mpsc::Sender<PlayerCommand>>>, event_receiver: Arc<Mutex<std::sync::mpsc::Receiver<PlayerEvent>>>) -> Self {
         Self {
             queue: Arc::new(RwLock::new(Vec::new())),
             current_track: RwLock::new(None),
-            command_sender
+            command_sender,
+            event_receiver
         }
     }
 
@@ -56,6 +58,7 @@ impl Queue {
     pub fn append(&self, track: &Track) {
         let mut q = self.queue.write().unwrap();
         q.push(track.clone());
+        debug!("appended new track to queue");
     }
 
     pub fn append_next(&self, tracks: Vec<&Track>) -> usize {
@@ -144,9 +147,11 @@ impl Queue {
 
     pub fn play(&self, mut index: usize) {
         if let Some(track) = &self.queue.read().unwrap().get(index) {
+            debug!("Dispatching load");
             self.dispatch(PlayerCommand::Load(track.id.as_ref().unwrap().to_owned()));
             let mut current = self.current_track.write().unwrap();
             current.replace(index);
+            debug!("Dispatching play");
             self.dispatch(PlayerCommand::Play);
         }
     }

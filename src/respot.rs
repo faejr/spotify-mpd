@@ -11,7 +11,6 @@ use librespot::core::spotify_id::SpotifyId;
 use std::pin::Pin;
 use futures_01::sync::oneshot::Canceled;
 use futures::task::Context;
-use std::time::Duration;
 
 #[derive(Debug)]
 pub enum PlayerCommand {
@@ -55,18 +54,18 @@ impl PlayerWorker {
                 let uri = SpotifyId::from_base62(&id).unwrap();
 
                 Box::pin(self.player.load(uri, false, 0));
-                debug!("Loaded track {:?}", id);
+                info!("Loaded track {:?}", id);
             },
             PlayerCommand::Play => {
                 self.player.play();
                 self.event_sender.send(PlayerEvent::Playing).unwrap();
                 self.active = true;
-                debug!("Starting playback");
+                info!("Starting playback");
             },
             PlayerCommand::Stop => {
                 self.player.stop();
                 self.active = false;
-                debug!("Stopping playback");
+                info!("Stopping playback");
             }
             _ => {}
         }
