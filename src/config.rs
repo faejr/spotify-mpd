@@ -19,7 +19,8 @@ pub struct SpotifyConfig {
 
 #[derive(Debug, Deserialize)]
 pub struct MpdConfig {
-    pub port: Option<u16>
+    pub ip: Option<String>,
+    pub port: Option<u16>,
 }
 
 impl Config {

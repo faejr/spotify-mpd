@@ -1,8 +1,9 @@
 [spotify]
-client_id="f8edeb3f6c3c4d6a842a223ddfd20f4d" # Spotify MPD client id. Can be replaced by your own.
+client_id="f8edeb3f6c3c4d6a842a223ddfd20f4d" # Spotify MPD client id.
 username=""
 password=""
 port=8080
 
 [mpd]
+ip="127.0.0.1"
 port=6600

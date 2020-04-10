@@ -19,6 +19,7 @@ use crate::respot::{PlayerEvent, Respot};
 use std::sync::{Mutex, Arc};
 use crate::queue::Queue;
 use futures::channel::mpsc;
+use std::borrow::Borrow;
 
 mod config;
 mod mpd;
@@ -62,8 +63,15 @@ async fn main() -> Result<()> {
                 .run(Session::connect(session_config, credentials, None, core.handle()))
                 .unwrap();
 
+            let mpd_config = config.mpd.as_ref().unwrap();
+            let mpd_ip = mpd_config.ip.as_ref().unwrap().to_owned();
+            let mpd_port = mpd_config.port.as_ref().unwrap().to_owned();
             std::thread::spawn(move || {
-                let mut mpd_server = mpd::MpdServer::new("127.0.0.1:6600", spotify, queue);
+                let mut mpd_server = mpd::MpdServer::new(
+                    format!("{}:{}", mpd_ip, mpd_port),
+                    spotify,
+                    queue
+                );
                 mpd_server.run();
             });
 

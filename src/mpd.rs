@@ -11,14 +11,14 @@ use crate::queue::Queue;
 
 mod mpd_commands;
 
-pub(crate) struct MpdServer<'a> {
-    host: &'a str,
+pub(crate) struct MpdServer {
+    host: String,
     spotify: Arc<Spotify>,
     queue: Arc<Queue>,
 }
 
-impl MpdServer<'static> {
-    pub fn new(host: &'static str, spotify: Arc<Spotify>, queue: Arc<Queue>) -> Self {
+impl MpdServer {
+    pub fn new(host: String, spotify: Arc<Spotify>, queue: Arc<Queue>) -> Self {
         Self {
             host,
             spotify,
