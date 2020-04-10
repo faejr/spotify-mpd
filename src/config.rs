@@ -5,7 +5,7 @@ use anyhow::Result;
 #[derive(Debug, Deserialize)]
 pub struct Config {
     pub spotify: Option<SpotifyConfig>,
-    pub mpd: Option<MpdConfig>
+    pub mpd: Option<MpdConfig>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -14,16 +14,16 @@ pub struct SpotifyConfig {
     pub client_secret: Option<String>,
     pub port: Option<u16>,
     pub username: Option<String>,
-    pub password: Option<String>
+    pub password: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
-pub struct MpdConfig{
+pub struct MpdConfig {
     pub port: Option<u16>
 }
 
 impl Config {
-    pub fn new()  -> Result<Self, anyhow::Error> {
+    pub fn new() -> Result<Self, anyhow::Error> {
         let config_contents = fs::read_to_string("config.toml")
             .expect("Something went wrong reading the config file");
 

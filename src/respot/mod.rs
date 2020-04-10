@@ -20,7 +20,7 @@ pub enum PlayerCommand {
     SetVolume(u16),
     Stop,
     Play,
-    Pause
+    Pause,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -28,8 +28,9 @@ pub enum PlayerEvent {
     FinishedTrack,
     Playing,
     Stopped,
-    Paused
+    Paused,
 }
+
 impl fmt::Display for PlayerEvent {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
@@ -44,6 +45,7 @@ impl fmt::Display for PlayerEvent {
 pub struct Respot {
     cancel_signal: IoStream<()>
 }
+
 impl Respot {
     pub fn new(session: Session, command_receiver: mpsc::UnboundedReceiver<PlayerCommand>, event_sender: std::sync::mpsc::Sender<PlayerEvent>) -> Self {
         let respot = Self {
@@ -53,7 +55,7 @@ impl Respot {
 
         respot
     }
-    fn start_player(&self, session: Session, command_receiver: mpsc::UnboundedReceiver<PlayerCommand>, event_sender: std::sync::mpsc::Sender<PlayerEvent>)  {
+    fn start_player(&self, session: Session, command_receiver: mpsc::UnboundedReceiver<PlayerCommand>, event_sender: std::sync::mpsc::Sender<PlayerEvent>) {
         thread::spawn(move || {
             let create_mixer = librespot::playback::mixer::find(Some("softvol".to_owned()))
                 .expect("Unable to create softvol mixer");
@@ -86,7 +88,7 @@ impl Future for Respot {
                 std::process::exit(0);
             };
 
-            return Ok(Async::NotReady)
+            return Ok(Async::NotReady);
         }
     }
 }

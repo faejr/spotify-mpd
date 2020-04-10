@@ -13,9 +13,9 @@ pub struct PlayerWorker {
     player: Player,
     command_receiver: Pin<Box<mpsc::UnboundedReceiver<PlayerCommand>>>,
     event_sender: std::sync::mpsc::Sender<PlayerEvent>,
-    play_task: Pin<Box<dyn Future<Output = Result<(), Canceled>>>>,
+    play_task: Pin<Box<dyn Future<Output=Result<(), Canceled>>>>,
     active: bool,
-    mixer: Box<dyn Mixer>
+    mixer: Box<dyn Mixer>,
 }
 
 impl PlayerWorker {
@@ -26,7 +26,7 @@ impl PlayerWorker {
             event_sender,
             play_task: Box::pin(futures::future::pending()),
             active: false,
-            mixer
+            mixer,
         }
     }
     fn handle_event(&mut self, event: PlayerCommand) {
@@ -36,24 +36,24 @@ impl PlayerWorker {
 
                 self.play_task = Box::pin(self.player.load(uri, false, 0).compat());
                 info!("Loaded track {:?}", id);
-            },
+            }
             PlayerCommand::Play => {
                 self.player.play();
                 self.event_sender.send(PlayerEvent::Playing).unwrap();
                 self.active = true;
                 info!("Starting playback");
-            },
+            }
             PlayerCommand::Pause => {
                 self.player.pause();
                 self.event_sender.send(PlayerEvent::Paused).unwrap();
                 self.active = false;
                 info!("pausing playback");
-            },
+            }
             PlayerCommand::Stop => {
                 self.player.stop();
                 self.active = false;
                 info!("Stopping playback");
-            },
+            }
             PlayerCommand::SetVolume(vol) => {
                 self.mixer.set_volume(Self::calc_logarithmic_volume(vol));
                 info!("Setting volume to {}", vol);

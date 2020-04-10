@@ -1,5 +1,5 @@
 use rspotify::client::Spotify;
-use rspotify::model::playlist::{SimplifiedPlaylist};
+use rspotify::model::playlist::SimplifiedPlaylist;
 use rspotify::model::artist::SimplifiedArtist;
 use async_trait::async_trait;
 use anyhow::{Error, Result};
@@ -18,6 +18,7 @@ pub trait MpdCommand {
 pub struct StatusCommand {
     queue: Arc<Queue>
 }
+
 impl StatusCommand {
     pub fn new(queue: Arc<Queue>) -> Self {
         Self {
@@ -25,6 +26,7 @@ impl StatusCommand {
         }
     }
 }
+
 #[async_trait]
 impl MpdCommand for StatusCommand {
     async fn execute(&self, _: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error> {
@@ -79,7 +81,7 @@ pub struct ListPlaylistsCommand {
 
 #[async_trait]
 impl MpdCommand for ListPlaylistsCommand {
-    async fn execute(&self, _: Option<regex::Captures<'_>>)-> Result<Vec<String>, Error> {
+    async fn execute(&self, _: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error> {
         let playlists_result = self.spotify.current_user_playlists(None, None).await;
         let mut string_builder = vec![];
 
@@ -90,10 +92,10 @@ impl MpdCommand for ListPlaylistsCommand {
                     // We don't know the time :(
                     string_builder.push("Last-Modified: 1970-01-01T00:00:00Z".to_owned());
                 }
-            },
+            }
             Err(e) => {
                 println!("error fetching playlists: {:?}", e)
-            },
+            }
         }
 
         Ok(string_builder)
@@ -103,6 +105,7 @@ impl MpdCommand for ListPlaylistsCommand {
 pub struct ListPlaylistInfoCommand {
     spotify: Arc<Spotify>
 }
+
 impl ListPlaylistInfoCommand {
     pub fn new(spotify: Arc<Spotify>) -> Self {
         Self {
@@ -110,6 +113,7 @@ impl ListPlaylistInfoCommand {
         }
     }
 }
+
 #[async_trait]
 impl MpdCommand for ListPlaylistInfoCommand {
     async fn execute(&self, args: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error> {
@@ -125,7 +129,7 @@ impl MpdCommand for ListPlaylistInfoCommand {
                     None,
                     None,
                     None,
-                    None
+                    None,
                 ).await;
                 match playlist_tracks_result {
                     Ok(playlist_tracks) => {
@@ -146,15 +150,14 @@ impl MpdCommand for ListPlaylistInfoCommand {
                                     let seconds = track.duration_ms / 1000;
                                     string_builder.push(format!("Time: {}", seconds));
                                     string_builder.push(format!("duration: {}", seconds));
-                                },
+                                }
                                 _ => {}
                             }
-
                         }
-                    },
+                    }
                     Err(_) => ()
                 }
-            },
+            }
             _ => {
                 string_builder.push("ACK".to_owned());
             }
@@ -163,6 +166,7 @@ impl MpdCommand for ListPlaylistInfoCommand {
         Ok(string_builder)
     }
 }
+
 impl ListPlaylistInfoCommand {
     async fn get_playlist_by_name(&self, name: &str) -> Option<SimplifiedPlaylist> {
         let playlists_result = self.spotify.current_user_playlists(None, None).await;
@@ -170,10 +174,10 @@ impl ListPlaylistInfoCommand {
             Ok(playlists) => {
                 for playlist in playlists.items {
                     if playlist.name == name {
-                        return Some(playlist)
+                        return Some(playlist);
                     }
                 }
-            },
+            }
             Err(_) => {
                 println!("Unable to get playlist by name")
             }
@@ -200,8 +204,9 @@ impl ListPlaylistInfoCommand {
 
 pub struct AddCommand {
     queue: Arc<Queue>,
-    spotify: Arc<Spotify>
+    spotify: Arc<Spotify>,
 }
+
 #[async_trait]
 impl MpdCommand for AddCommand {
     async fn execute(&self, args: Option<Captures<'_>>) -> Result<Vec<String>, Error> {
@@ -213,18 +218,19 @@ impl MpdCommand for AddCommand {
                 let track = Track::from(&full_track);
                 let song_id = self.queue.append(&track);
                 output.push(format!("Id: {}", song_id))
-            },
+            }
             Err(e) => return Err(Error::from(e.compat()))
         }
 
         Ok(output)
     }
 }
+
 impl AddCommand {
     pub fn new(queue: Arc<Queue>, spotify: Arc<Spotify>) -> Self {
         Self {
             queue,
-            spotify
+            spotify,
         }
     }
 }
@@ -232,6 +238,7 @@ impl AddCommand {
 pub struct PlayCommand {
     queue: Arc<Queue>
 }
+
 impl PlayCommand {
     pub fn new(queue: Arc<Queue>) -> Self {
         Self {
@@ -239,6 +246,7 @@ impl PlayCommand {
         }
     }
 }
+
 #[async_trait]
 impl MpdCommand for PlayCommand {
     async fn execute(&self, args: Option<Captures<'_>>) -> Result<Vec<String>, Error> {
@@ -252,6 +260,7 @@ impl MpdCommand for PlayCommand {
 pub struct PauseCommand {
     queue: Arc<Queue>
 }
+
 impl PauseCommand {
     pub fn new(queue: Arc<Queue>) -> Self {
         Self {
@@ -259,6 +268,7 @@ impl PauseCommand {
         }
     }
 }
+
 #[async_trait]
 impl MpdCommand for PauseCommand {
     async fn execute(&self, _: Option<Captures<'_>>) -> Result<Vec<String>, Error> {
@@ -271,6 +281,7 @@ impl MpdCommand for PauseCommand {
 pub struct NextCommand {
     queue: Arc<Queue>
 }
+
 impl NextCommand {
     pub fn new(queue: Arc<Queue>) -> Self {
         Self {
@@ -278,6 +289,7 @@ impl NextCommand {
         }
     }
 }
+
 #[async_trait]
 impl MpdCommand for NextCommand {
     async fn execute(&self, _: Option<Captures<'_>>) -> Result<Vec<String>, Error> {
@@ -290,6 +302,7 @@ impl MpdCommand for NextCommand {
 pub struct PrevCommand {
     queue: Arc<Queue>
 }
+
 impl PrevCommand {
     pub fn new(queue: Arc<Queue>) -> Self {
         Self {
@@ -297,6 +310,7 @@ impl PrevCommand {
         }
     }
 }
+
 #[async_trait]
 impl MpdCommand for PrevCommand {
     async fn execute(&self, _: Option<Captures<'_>>) -> Result<Vec<String>, Error> {
@@ -309,6 +323,7 @@ impl MpdCommand for PrevCommand {
 pub struct ClearCommand {
     queue: Arc<Queue>
 }
+
 impl ClearCommand {
     pub fn new(queue: Arc<Queue>) -> Self {
         Self {
@@ -316,6 +331,7 @@ impl ClearCommand {
         }
     }
 }
+
 #[async_trait]
 impl MpdCommand for ClearCommand {
     async fn execute(&self, _: Option<Captures<'_>>) -> Result<Vec<String>, Error> {
@@ -328,11 +344,13 @@ impl MpdCommand for ClearCommand {
 pub struct PlaylistInfoCommand {
     queue: Arc<Queue>
 }
+
 impl PlaylistInfoCommand {
     pub fn new(queue: Arc<Queue>) -> Self {
         Self { queue }
     }
 }
+
 #[async_trait]
 impl MpdCommand for PlaylistInfoCommand {
     async fn execute(&self, _: Option<Captures<'_>>) -> Result<Vec<String>, Error> {
@@ -351,11 +369,13 @@ impl MpdCommand for PlaylistInfoCommand {
 pub struct CurrentSongCommand {
     queue: Arc<Queue>
 }
+
 impl CurrentSongCommand {
     pub fn new(queue: Arc<Queue>) -> Self {
         Self { queue }
     }
 }
+
 #[async_trait]
 impl MpdCommand for CurrentSongCommand {
     async fn execute(&self, _: Option<Captures<'_>>) -> Result<Vec<String>, Error> {
@@ -371,11 +391,13 @@ impl MpdCommand for CurrentSongCommand {
 pub struct SetVolCommand {
     queue: Arc<Queue>
 }
+
 impl SetVolCommand {
     pub fn new(queue: Arc<Queue>) -> Self {
         Self { queue }
     }
 }
+
 #[async_trait]
 impl MpdCommand for SetVolCommand {
     async fn execute(&self, args: Option<Captures<'_>>) -> Result<Vec<String>, Error> {
@@ -390,11 +412,13 @@ impl MpdCommand for SetVolCommand {
 pub struct VolumeCommand {
     queue: Arc<Queue>
 }
+
 impl VolumeCommand {
     pub fn new(queue: Arc<Queue>) -> Self {
         Self { queue }
     }
 }
+
 #[async_trait]
 impl MpdCommand for VolumeCommand {
     async fn execute(&self, args: Option<Captures<'_>>) -> Result<Vec<String>, Error> {
@@ -411,11 +435,13 @@ impl MpdCommand for VolumeCommand {
 pub struct DeleteIdCommand {
     queue: Arc<Queue>
 }
+
 impl DeleteIdCommand {
     pub fn new(queue: Arc<Queue>) -> Self {
         Self { queue }
     }
 }
+
 #[async_trait]
 impl MpdCommand for DeleteIdCommand {
     async fn execute(&self, args: Option<Captures<'_>>) -> Result<Vec<String>, Error> {

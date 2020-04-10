@@ -16,7 +16,7 @@ pub struct Queue {
     status: RwLock<PlayerEvent>,
     elapsed: RwLock<Option<Duration>>,
     since: RwLock<Option<SystemTime>>,
-    volume: AtomicU16
+    volume: AtomicU16,
 }
 
 impl Queue {
@@ -28,7 +28,7 @@ impl Queue {
             status: RwLock::new(PlayerEvent::Stopped),
             elapsed: RwLock::new(None),
             since: RwLock::new(None),
-            volume: AtomicU16::new(100)
+            volume: AtomicU16::new(100),
         }
     }
 
@@ -187,7 +187,7 @@ impl Queue {
 
     pub fn get_duration(&self) -> u32 {
         if let Some(ref track) = self.get_current() {
-            return track.duration / 1000
+            return track.duration / 1000;
         }
 
         0
@@ -243,7 +243,7 @@ impl Queue {
         *since
     }
 
-    fn dispatch (&self, command: PlayerCommand) {
+    fn dispatch(&self, command: PlayerCommand) {
         self.command_sender.lock().unwrap().unbounded_send(command).unwrap();
     }
 }
@@ -252,11 +252,12 @@ struct QueueWorker {
     queue: Arc<Queue>,
     event_receiver: std::sync::mpsc::Receiver<PlayerEvent>,
 }
+
 impl QueueWorker {
     fn new(queue: Arc<Queue>, event_receiver: std::sync::mpsc::Receiver<PlayerEvent>) -> Self {
         Self {
             queue,
-            event_receiver
+            event_receiver,
         }
     }
 
@@ -275,7 +276,7 @@ impl QueueWorker {
                 self.queue.set_elapsed(None);
                 self.queue.set_since(None);
                 self.queue.next();
-            },
+            }
             PlayerEvent::Stopped => {
                 self.queue.set_elapsed(None);
                 self.queue.set_since(None);

@@ -14,7 +14,7 @@ mod mpd_commands;
 pub(crate) struct MpdServer<'a> {
     host: &'a str,
     spotify: Arc<Spotify>,
-    queue: Arc<Queue>
+    queue: Arc<Queue>,
 }
 
 impl MpdServer<'static> {
@@ -22,7 +22,7 @@ impl MpdServer<'static> {
         Self {
             host,
             spotify,
-            queue
+            queue,
         }
     }
 
@@ -37,7 +37,7 @@ impl MpdServer<'static> {
                     let spotify = Arc::clone(&self.spotify);
                     let queue = Arc::clone(&self.queue);
 
-                    thread::spawn(move|| {
+                    thread::spawn(move || {
                         let mut mpd_handler = MpdRequestHandler::new(spotify, queue);
                         mpd_handler.handle_client(stream)
                     });
@@ -56,23 +56,23 @@ impl MpdServer<'static> {
 struct MpdRequestHandler {
     commands: HashMap<&'static str, Box<dyn MpdCommand + 'static>>,
     spotify: Arc<Spotify>,
-    queue: Arc<Queue>
+    queue: Arc<Queue>,
 }
 
 impl MpdRequestHandler {
-    pub fn new(spotify: Arc<Spotify>, queue: Arc<Queue>) -> Self{
+    pub fn new(spotify: Arc<Spotify>, queue: Arc<Queue>) -> Self {
         Self {
             spotify,
             queue,
-            commands: HashMap::new()
+            commands: HashMap::new(),
         }
     }
 
     fn commands(&self) -> HashMap<&'static str, Box<dyn MpdCommand>> {
         let mut commands: HashMap<&'static str, Box<dyn MpdCommand>> = HashMap::new();
         commands.insert("status", Box::new(StatusCommand::new(Arc::clone(&self.queue))));
-        commands.insert("stats", Box::new(StatsCommand{}));
-        commands.insert("listplaylists", Box::new(ListPlaylistsCommand{ spotify: Arc::clone(&self.spotify) }));
+        commands.insert("stats", Box::new(StatsCommand {}));
+        commands.insert("listplaylists", Box::new(ListPlaylistsCommand { spotify: Arc::clone(&self.spotify) }));
         commands.insert("listplaylistinfo", Box::new(ListPlaylistInfoCommand::new(Arc::clone(&self.spotify))));
         commands.insert("add", Box::new(AddCommand::new(Arc::clone(&self.queue), Arc::clone(&self.spotify))));
         commands.insert("addid", Box::new(AddCommand::new(Arc::clone(&self.queue), Arc::clone(&self.spotify))));
@@ -131,7 +131,7 @@ impl MpdRequestHandler {
                 _ => {}
             }
             if self.has_error(&output) {
-                break
+                break;
             }
         }
         if self.has_error(&output) {
@@ -144,17 +144,17 @@ impl MpdRequestHandler {
         stream.write(output.join("\n").as_bytes()).unwrap();
     }
 
-    fn has_error (&self, output: &Vec<String>) -> bool {
+    fn has_error(&self, output: &Vec<String>) -> bool {
         for s in output {
             if s.starts_with("ACK") {
-                return true
+                return true;
             }
         }
 
         false
     }
 
-    async fn do_command (&self, command: String) -> Result<Vec<String>, Error> {
+    async fn do_command(&self, command: String) -> Result<Vec<String>, Error> {
         lazy_static! {
             static ref RE: Regex = Regex::new("\\s+\"?([^\"]*)\"?").unwrap();
         }
@@ -170,7 +170,7 @@ impl MpdRequestHandler {
                 return match mpd_command.execute(args).await {
                     Ok(cmd) => Ok(cmd),
                     Err(e) => Err(e)
-                }
+                };
             }
         }
 

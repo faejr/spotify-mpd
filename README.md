@@ -8,20 +8,14 @@ Created with the motivation to not be confined to Spotify's resource heavy deskt
 * Rust
 * A Spotify Premium account
 
-### Installing
+# Todo
 
-A step by step series of examples that tell you how to get a development env running
-
-Say what the step will be
-
-```
-Give the example
-```
-
-And repeat
-
-```
-until finished
-```
-
-End with an example of getting some data out of the system or using it for a little demo
+* Fix auto refresh of spotify token
+* Implement repeat queue
+* Implement shuffle queue
+* Implement `seekid` command
+* Implement `move` command
+* Find out what other commands we need to implement
+* Walk through each track page to find all songs in a playlist
+* Add tests
+* Look into if we should utilize librespot for fetching more data instead of rspotify

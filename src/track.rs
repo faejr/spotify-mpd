@@ -15,7 +15,7 @@ pub struct Track {
     pub album_artists: Vec<String>,
     pub url: String,
     pub added_at: Option<DateTime<Utc>>,
-    pub date: String
+    pub date: String,
 }
 
 impl Track {
@@ -66,7 +66,7 @@ impl From<&FullTrack> for Track {
             album_artists,
             url: track.uri.clone(),
             added_at: None,
-            date
+            date,
         }
     }
 }
