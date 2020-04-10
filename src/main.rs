@@ -5,7 +5,6 @@ extern crate regex;
 extern crate log;
 
 extern crate strum;
-#[macro_use]
 extern crate strum_macros;
 
 use crate::spotify::{new_spotify_client, get_token_auto, SCOPES};
@@ -16,7 +15,7 @@ use tokio_core::reactor::Core;
 use librespot::core::authentication::Credentials;
 use librespot::core::config::SessionConfig;
 use librespot::core::session::Session;
-use crate::respot::{PlayerCommand, PlayerEvent, Respot};
+use crate::respot::{PlayerEvent, Respot};
 use std::sync::{Mutex, Arc};
 use crate::queue::Queue;
 use futures::channel::mpsc;
@@ -47,7 +46,7 @@ async fn main() -> Result<()> {
 
     match get_token_auto(&mut oauth, spotify_config.port.unwrap()).await {
         Some(token_info) => {
-            let (spotify, token_expiry) = new_spotify_client(token_info);
+            let (spotify, _token_expiry) = new_spotify_client(token_info);
 
             let (command_sender, command_receiver) = mpsc::unbounded();
             let (event_sender, event_receiver) = std::sync::mpsc::channel::<PlayerEvent>();

@@ -18,8 +18,6 @@ pub enum PlayerCommand {
     Load(String),
     Seek(u32),
     SetVolume(u16),
-    NextTrack,
-    PreviousTrack,
     Stop,
     Play,
     Pause

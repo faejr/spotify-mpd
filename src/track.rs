@@ -1,5 +1,4 @@
-use rspotify::model::track::{SimplifiedTrack, FullTrack};
-use rspotify::model::album::FullAlbum;
+use rspotify::model::track::FullTrack;
 use serde::{Serialize, Deserialize};
 use chrono::{DateTime, Utc};
 
@@ -11,58 +10,15 @@ pub struct Track {
     pub disc_number: i32,
     pub duration: u32,
     pub artists: Vec<String>,
-    pub artist_ids: Vec<String>,
     pub album: String,
     pub album_id: Option<String>,
     pub album_artists: Vec<String>,
-    pub cover_url: String,
     pub url: String,
     pub added_at: Option<DateTime<Utc>>,
     pub date: String
 }
 
 impl Track {
-    pub fn from_simplified_track(track: &SimplifiedTrack, album: &FullAlbum) -> Self {
-        let artists = track
-            .artists
-            .iter()
-            .map(|ref artist| artist.name.clone())
-            .collect::<Vec<String>>();
-        let artist_ids = track
-            .artists
-            .iter()
-            .filter(|a| a.id.is_some())
-            .map(|ref artist| artist.id.clone().unwrap())
-            .collect::<Vec<String>>();
-        let album_artists = album
-            .artists
-            .iter()
-            .map(|ref artist| artist.name.clone())
-            .collect::<Vec<String>>();
-
-        let cover_url = match album.images.get(0) {
-            Some(image) => image.url.clone(),
-            None => "".to_owned(),
-        };
-
-        Self {
-            id: track.id.clone(),
-            title: track.name.clone(),
-            track_number: track.track_number,
-            disc_number: track.disc_number,
-            duration: track.duration_ms,
-            artists,
-            artist_ids,
-            album: album.name.clone(),
-            album_id: Some(album.id.clone()),
-            album_artists,
-            cover_url,
-            url: track.uri.clone(),
-            added_at: None,
-            date: "".to_owned()
-        }
-    }
-
     pub fn to_mpd_format(&self, pos: i32) -> Vec<String> {
         let mut output = vec![];
 
@@ -89,23 +45,12 @@ impl From<&FullTrack> for Track {
             .iter()
             .map(|ref artist| artist.name.clone())
             .collect::<Vec<String>>();
-        let artist_ids = track
-            .artists
-            .iter()
-            .filter(|a| a.id.is_some())
-            .map(|ref artist| artist.id.clone().unwrap())
-            .collect::<Vec<String>>();
         let album_artists = track
             .album
             .artists
             .iter()
             .map(|ref artist| artist.name.clone())
             .collect::<Vec<String>>();
-
-        let cover_url = match track.album.images.get(0) {
-            Some(image) => image.url.clone(),
-            None => "".to_owned(),
-        };
 
         let date = track.album.release_date.to_owned().unwrap();
 
@@ -116,11 +61,9 @@ impl From<&FullTrack> for Track {
             disc_number: track.disc_number,
             duration: track.duration_ms,
             artists,
-            artist_ids,
             album: track.album.name.clone(),
             album_id: track.album.id.clone(),
             album_artists,
-            cover_url,
             url: track.uri.clone(),
             added_at: None,
             date

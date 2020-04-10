@@ -110,7 +110,6 @@ impl ListPlaylistInfoCommand {
         }
     }
 }
-// TODO: Walk through each track page to find all songs in a playlist
 #[async_trait]
 impl MpdCommand for ListPlaylistInfoCommand {
     async fn execute(&self, args: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error> {
@@ -217,7 +216,6 @@ impl MpdCommand for AddCommand {
             },
             Err(e) => return Err(Error::from(e.compat()))
         }
-        debug!("{}", track_id);
 
         Ok(output)
     }

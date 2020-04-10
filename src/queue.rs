@@ -43,8 +43,8 @@ impl Queue {
 
     pub fn next_index(&self) -> Option<usize> {
         match *self.current_track.read().unwrap() {
-            Some(mut index) => {
-                let mut next_index = index + 1;
+            Some(index) => {
+                let next_index = index + 1;
                 if next_index < self.queue.read().unwrap().len() {
                     Some(next_index)
                 } else {
@@ -86,26 +86,9 @@ impl Queue {
     pub fn append(&self, track: &Track) -> usize {
         let mut queue = self.queue.write().unwrap();
         queue.push(track.clone());
-        debug!("appended new track to queue");
+        debug!("New track appended to queue");
 
         queue.len() - 1
-    }
-
-    pub fn append_next(&self, tracks: Vec<&Track>) -> usize {
-        let mut queue = self.queue.write().unwrap();
-
-        let first = match *self.current_track.read().unwrap() {
-            Some(index) => index + 1,
-            None => queue.len(),
-        };
-
-        let mut i = first;
-        for track in tracks {
-            queue.insert(i, track.clone());
-            i += 1;
-        }
-
-        first
     }
 
     pub fn remove(&self, index: usize) {
@@ -307,7 +290,7 @@ impl QueueWorker {
 impl futures::Future for QueueWorker {
     type Output = Result<(), ()>;
 
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> futures::task::Poll<Self::Output> {
+    fn poll(self: Pin<&mut Self>, _cx: &mut Context) -> futures::task::Poll<Self::Output> {
         loop {
             let mut progress = false;
 

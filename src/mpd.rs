@@ -88,7 +88,6 @@ impl MpdRequestHandler {
         commands.insert("setvol", Box::new(SetVolCommand::new(Arc::clone(&self.queue))));
         commands.insert("volume", Box::new(VolumeCommand::new(Arc::clone(&self.queue))));
         commands.insert("deleteid", Box::new(DeleteIdCommand::new(Arc::clone(&self.queue))));
-        //TODO: add SeekIdCommand
 
         commands
     }
