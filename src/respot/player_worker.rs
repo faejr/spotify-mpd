@@ -59,11 +59,11 @@ impl PlayerWorker {
         }
     }
 
-    fn calc_logarithmic_volume(mut volume: u16) -> u16 {
-        volume = ((std::cmp::min(volume, 100) as f32) / 100.0 * 65535_f32).ceil() as u16;
+    fn calc_logarithmic_volume(volume: u16) -> u16 {
+        let mixer_volume = ((std::cmp::min(volume, 100) as f32) / 100.0 * 65535_f32).ceil() as u16;
         // Volume conversion taken from https://github.com/plietar/librespot/blob/master/src/spirc.rs
         const IDEAL_FACTOR: f64 = 6.908;
-        let normalized_volume = volume as f64 / std::u16::MAX as f64;
+        let normalized_volume = mixer_volume as f64 / std::u16::MAX as f64;
 
         let mut val = std::u16::MAX;
         if normalized_volume < 0.999 {

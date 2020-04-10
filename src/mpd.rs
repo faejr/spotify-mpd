@@ -75,6 +75,7 @@ impl MpdRequestHandler {
         commands.insert("listplaylists", Box::new(ListPlaylistsCommand{ spotify: Arc::clone(&self.spotify) }));
         commands.insert("listplaylistinfo", Box::new(ListPlaylistInfoCommand::new(Arc::clone(&self.spotify))));
         commands.insert("add", Box::new(AddCommand::new(Arc::clone(&self.queue), Arc::clone(&self.spotify))));
+        commands.insert("addid", Box::new(AddCommand::new(Arc::clone(&self.queue), Arc::clone(&self.spotify))));
         commands.insert("play", Box::new(PlayCommand::new(Arc::clone(&self.queue))));
         commands.insert("playid", Box::new(PlayCommand::new(Arc::clone(&self.queue))));
         commands.insert("pause", Box::new(PauseCommand::new(Arc::clone(&self.queue))));
@@ -82,8 +83,12 @@ impl MpdRequestHandler {
         commands.insert("prev", Box::new(PrevCommand::new(Arc::clone(&self.queue))));
         commands.insert("clear", Box::new(ClearCommand::new(Arc::clone(&self.queue))));
         commands.insert("playlistinfo", Box::new(PlaylistInfoCommand::new(Arc::clone(&self.queue))));
+        commands.insert("plchanges", Box::new(PlaylistInfoCommand::new(Arc::clone(&self.queue))));
         commands.insert("currentsong", Box::new(CurrentSongCommand::new(Arc::clone(&self.queue))));
         commands.insert("setvol", Box::new(SetVolCommand::new(Arc::clone(&self.queue))));
+        commands.insert("volume", Box::new(VolumeCommand::new(Arc::clone(&self.queue))));
+        commands.insert("deleteid", Box::new(DeleteIdCommand::new(Arc::clone(&self.queue))));
+        //TODO: add SeekIdCommand
 
         commands
     }

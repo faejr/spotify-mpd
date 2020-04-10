@@ -6,6 +6,7 @@ use futures::task::{Context, Poll};
 use std::pin::Pin;
 use tokio_core::reactor::Core;
 use std::time::{Duration, SystemTime};
+use std::sync::atomic::AtomicU16;
 
 pub struct Queue {
     pub queue: Arc<RwLock<Vec<Track>>>,
@@ -13,7 +14,8 @@ pub struct Queue {
     command_sender: Arc<Mutex<std::sync::mpsc::Sender<PlayerCommand>>>,
     status: RwLock<PlayerEvent>,
     elapsed: RwLock<Option<Duration>>,
-    since: RwLock<Option<SystemTime>>
+    since: RwLock<Option<SystemTime>>,
+    volume: AtomicU16
 }
 
 impl Queue {
@@ -25,6 +27,7 @@ impl Queue {
             status: RwLock::new(PlayerEvent::Stopped),
             elapsed: RwLock::new(None),
             since: RwLock::new(None),
+            volume: AtomicU16::new(100)
         }
     }
 
@@ -53,9 +56,9 @@ impl Queue {
 
     pub fn previous_index(&self) -> Option<usize> {
         match *self.current_track.read().unwrap() {
-            Some(mut index) => {
+            Some(index) => {
                 if index > 0 {
-                    let mut next_index = index - 1;
+                    let next_index = index - 1;
                     Some(next_index)
                 } else {
                     None
@@ -67,7 +70,7 @@ impl Queue {
 
     pub fn get_current_index(&self) -> Option<usize> {
         match *self.current_track.read().unwrap() {
-            Some(mut index) => Some(index),
+            Some(index) => Some(index),
             None => None,
         }
     }
@@ -79,23 +82,25 @@ impl Queue {
         }
     }
 
-    pub fn append(&self, track: &Track) {
-        let mut q = self.queue.write().unwrap();
-        q.push(track.clone());
+    pub fn append(&self, track: &Track) -> usize {
+        let mut queue = self.queue.write().unwrap();
+        queue.push(track.clone());
         debug!("appended new track to queue");
+
+        queue.len() - 1
     }
 
     pub fn append_next(&self, tracks: Vec<&Track>) -> usize {
-        let mut q = self.queue.write().unwrap();
+        let mut queue = self.queue.write().unwrap();
 
         let first = match *self.current_track.read().unwrap() {
             Some(index) => index + 1,
-            None => q.len(),
+            None => queue.len(),
         };
 
         let mut i = first;
         for track in tracks {
-            q.insert(i, track.clone());
+            queue.insert(i, track.clone());
             i += 1;
         }
 
@@ -104,8 +109,8 @@ impl Queue {
 
     pub fn remove(&self, index: usize) {
         {
-            let mut q = self.queue.write().unwrap();
-            q.remove(index);
+            let mut queue = self.queue.write().unwrap();
+            queue.remove(index);
         }
 
         // if the queue is empty stop playback
@@ -150,7 +155,7 @@ impl Queue {
         self.queue.read().unwrap().len()
     }
 
-    pub fn play(&self, mut index: usize) {
+    pub fn play(&self, index: usize) {
         if let Some(track) = &self.queue.read().unwrap().get(index) {
             debug!("Dispatching load");
             self.dispatch(PlayerCommand::Load(track.id.as_ref().unwrap().to_owned()));
@@ -216,8 +221,13 @@ impl Queue {
             .unwrap_or(Duration::from_secs(0))
     }
 
+    pub fn get_volume(&self) -> u16 {
+        self.volume.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
     pub fn set_volume(&self, vol: u16) {
         debug!("Dispatching set volume");
+        self.volume.store(vol, std::sync::atomic::Ordering::Relaxed);
         self.dispatch(PlayerCommand::SetVolume(vol));
     }
 
@@ -281,6 +291,7 @@ impl QueueWorker {
                 info!("Received a playing event!");
             }
             PlayerEvent::FinishedTrack => {
+                debug!("Finished track!");
                 self.queue.next();
             },
             PlayerEvent::Stopped => {

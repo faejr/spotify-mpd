@@ -29,7 +29,6 @@ impl StatusCommand {
 impl MpdCommand for StatusCommand {
     async fn execute(&self, _: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error> {
         let mut output = vec![];
-        output.push("volume: 100");
         output.push("repeat: 0");
         output.push("random: 0");
         output.push("single: 0");
@@ -38,6 +37,7 @@ impl MpdCommand for StatusCommand {
         output.push("mixrampdb: 0.00000");
 
         let mut output_strings: Vec<String> = output.iter().map(|x| x.to_string()).collect::<Vec<String>>().into();
+        output_strings.push(format!("volume: {}", self.queue.get_volume()));
         let status = self.queue.get_status();
         let playlist_length = self.queue.len();
         output_strings.push(format!("playlistlength: {}", playlist_length));
@@ -53,7 +53,7 @@ impl MpdCommand for StatusCommand {
             output_strings.push(format!("elapsed: {}", elapsed.as_secs_f32()));
             output_strings.push(format!("duration: {}", duration));
             output_strings.push("audio: 44100:24:2".to_owned());
-            output_strings.push("bitrate: 160".to_owned());
+            output_strings.push("bitrate: 320".to_owned());
         }
 
         Ok(output_strings)
@@ -206,18 +206,20 @@ pub struct AddCommand {
 #[async_trait]
 impl MpdCommand for AddCommand {
     async fn execute(&self, args: Option<Captures<'_>>) -> Result<Vec<String>, Error> {
+        let mut output = vec![];
         let track_id = &args.unwrap()[1];
         let track_result = self.spotify.track(track_id).await;
         match track_result {
             Ok(full_track) => {
                 let track = Track::from(&full_track);
-                self.queue.append(&track);
+                let song_id = self.queue.append(&track);
+                output.push(format!("Id: {}", song_id))
             },
             Err(e) => return Err(Error::from(e.compat()))
         }
         debug!("{}", track_id);
 
-        Ok(vec![])
+        Ok(output)
     }
 }
 impl AddCommand {
@@ -335,7 +337,7 @@ impl PlaylistInfoCommand {
 }
 #[async_trait]
 impl MpdCommand for PlaylistInfoCommand {
-    async fn execute(&self, args: Option<Captures<'_>>) -> Result<Vec<String>, Error> {
+    async fn execute(&self, _: Option<Captures<'_>>) -> Result<Vec<String>, Error> {
         let mut output = vec![];
         let queue = self.queue.queue.read().unwrap();
         let mut pos = 0;
@@ -358,7 +360,7 @@ impl CurrentSongCommand {
 }
 #[async_trait]
 impl MpdCommand for CurrentSongCommand {
-    async fn execute(&self, args: Option<Captures<'_>>) -> Result<Vec<String>, Error> {
+    async fn execute(&self, _: Option<Captures<'_>>) -> Result<Vec<String>, Error> {
         let mut output = vec![];
         if let Some(current_track) = self.queue.get_current() {
             output = current_track.to_mpd_format(0);
@@ -382,6 +384,48 @@ impl MpdCommand for SetVolCommand {
         let volume_level = &args.unwrap()[1];
 
         self.queue.set_volume(volume_level.parse::<u16>().unwrap());
+
+        Ok(vec![])
+    }
+}
+
+pub struct VolumeCommand {
+    queue: Arc<Queue>
+}
+impl VolumeCommand {
+    pub fn new(queue: Arc<Queue>) -> Self {
+        Self { queue }
+    }
+}
+#[async_trait]
+impl MpdCommand for VolumeCommand {
+    async fn execute(&self, args: Option<Captures<'_>>) -> Result<Vec<String>, Error> {
+        let volume_level_str = &args.unwrap()[1];
+        println!("{:?}", volume_level_str);
+        let volume_level = volume_level_str.parse::<i16>().unwrap();
+
+        self.queue.set_volume(self.queue.get_volume().wrapping_add(volume_level as u16));
+
+        Ok(vec![])
+    }
+}
+
+pub struct DeleteIdCommand {
+    queue: Arc<Queue>
+}
+impl DeleteIdCommand {
+    pub fn new(queue: Arc<Queue>) -> Self {
+        Self { queue }
+    }
+}
+#[async_trait]
+impl MpdCommand for DeleteIdCommand {
+    async fn execute(&self, args: Option<Captures<'_>>) -> Result<Vec<String>, Error> {
+        let song_id_arg = &args.unwrap()[1];
+
+        if let Ok(song_id) = usize::from_str(song_id_arg) {
+            self.queue.remove(song_id);
+        }
 
         Ok(vec![])
     }
