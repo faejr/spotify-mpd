@@ -1,25 +1,28 @@
 use crate::respot::{PlayerCommand, PlayerEvent};
 use librespot::playback::player::Player;
-use futures::channel::oneshot::Canceled;
 use librespot::core::spotify_id::SpotifyId;
 use futures::task::{Context, Poll};
 use std::pin::Pin;
 use librespot::playback::mixer::Mixer;
+use futures::channel::mpsc;
+use futures::{Stream, Future};
+use futures::compat::Future01CompatExt;
+use futures_01::sync::oneshot::Canceled;
 
 pub struct PlayerWorker {
     player: Player,
-    command_receiver: std::sync::mpsc::Receiver<PlayerCommand>,
+    command_receiver: Pin<Box<mpsc::UnboundedReceiver<PlayerCommand>>>,
     event_sender: std::sync::mpsc::Sender<PlayerEvent>,
-    play_task: Pin<Box<dyn futures::Future<Output = Result<(), Canceled>>>>,
+    play_task: Pin<Box<dyn Future<Output = Result<(), Canceled>>>>,
     active: bool,
     mixer: Box<dyn Mixer>
 }
 
 impl PlayerWorker {
-    pub fn new(player: Player, mixer: Box<dyn Mixer>, command_receiver: std::sync::mpsc::Receiver<PlayerCommand>, event_sender: std::sync::mpsc::Sender<PlayerEvent>) -> Self {
+    pub fn new(player: Player, mixer: Box<dyn Mixer>, command_receiver: mpsc::UnboundedReceiver<PlayerCommand>, event_sender: std::sync::mpsc::Sender<PlayerEvent>) -> Self {
         Self {
             player,
-            command_receiver,
+            command_receiver: Box::pin(command_receiver),
             event_sender,
             play_task: Box::pin(futures::future::pending()),
             active: false,
@@ -31,7 +34,7 @@ impl PlayerWorker {
             PlayerCommand::Load(id) => {
                 let uri = SpotifyId::from_base62(&id).unwrap();
 
-                Box::pin(self.player.load(uri, false, 0));
+                self.play_task = Box::pin(self.player.load(uri, false, 0).compat());
                 info!("Loaded track {:?}", id);
             },
             PlayerCommand::Play => {
@@ -84,7 +87,7 @@ impl futures::Future for PlayerWorker {
         loop {
             let mut progress = false;
 
-            if let Ok(command) = self.command_receiver.recv() {
+            if let Poll::Ready(Some(command)) = self.command_receiver.as_mut().poll_next(cx) {
                 self.handle_event(command);
 
                 progress = true;
@@ -92,15 +95,15 @@ impl futures::Future for PlayerWorker {
 
             match self.play_task.as_mut().poll(cx) {
                 Poll::Ready(Ok(())) => {
-                    debug!("end of track!");
+                    debug!("player: PlayerState::EndOfTrack");
                     progress = true;
                     self.event_sender.send(PlayerEvent::FinishedTrack).unwrap();
                 }
                 Poll::Ready(Err(Canceled)) => {
-                    debug!("player task is over!");
+                    debug!("player task cancelled");
                     self.play_task = Box::pin(futures::future::pending());
                 }
-                Poll::Pending => (),
+                Poll::Pending => ()
             }
 
             if !progress {

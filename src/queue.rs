@@ -7,11 +7,12 @@ use std::pin::Pin;
 use tokio_core::reactor::Core;
 use std::time::{Duration, SystemTime};
 use std::sync::atomic::AtomicU16;
+use futures::channel::mpsc;
 
 pub struct Queue {
     pub queue: Arc<RwLock<Vec<Track>>>,
     current_track: RwLock<Option<usize>>,
-    command_sender: Arc<Mutex<std::sync::mpsc::Sender<PlayerCommand>>>,
+    command_sender: Arc<Mutex<mpsc::UnboundedSender<PlayerCommand>>>,
     status: RwLock<PlayerEvent>,
     elapsed: RwLock<Option<Duration>>,
     since: RwLock<Option<SystemTime>>,
@@ -19,7 +20,7 @@ pub struct Queue {
 }
 
 impl Queue {
-    pub fn new(command_sender: Arc<Mutex<std::sync::mpsc::Sender<PlayerCommand>>>) -> Self {
+    pub fn new(command_sender: Arc<Mutex<mpsc::UnboundedSender<PlayerCommand>>>) -> Self {
         Self {
             queue: Arc::new(RwLock::new(Vec::new())),
             current_track: RwLock::new(None),
@@ -113,23 +114,15 @@ impl Queue {
             queue.remove(index);
         }
 
-        // if the queue is empty stop playback
-        let len = self.queue.read().unwrap().len();
-        if len == 0 {
+        if self.queue_is_empty() {
             self.stop();
             return;
         }
-
-        // if we are deleting the currently playing track, play the track with
-        // the same index again, because the next track is now at the position
-        // of the one we deleted
         let current = *self.current_track.read().unwrap();
         if let Some(current_track) = current {
             match current_track.cmp(&index) {
                 Ordering::Equal => {
-                    // stop playback if we have the deleted the last item and it
-                    // was playing
-                    if current_track == len {
+                    if current_track == self.queue.read().unwrap().len() {
                         self.stop();
                     } else {
                         self.play(index);
@@ -142,6 +135,10 @@ impl Queue {
                 _ => (),
             }
         }
+    }
+
+    fn queue_is_empty(&self) -> bool {
+        self.queue.read().unwrap().len() == 0
     }
 
     pub fn clear(&self) {
@@ -264,7 +261,7 @@ impl Queue {
     }
 
     fn dispatch (&self, command: PlayerCommand) {
-        self.command_sender.lock().unwrap().send(command).unwrap();
+        self.command_sender.lock().unwrap().unbounded_send(command).unwrap();
     }
 }
 
@@ -292,6 +289,8 @@ impl QueueWorker {
             }
             PlayerEvent::FinishedTrack => {
                 debug!("Finished track!");
+                self.queue.set_elapsed(None);
+                self.queue.set_since(None);
                 self.queue.next();
             },
             PlayerEvent::Stopped => {

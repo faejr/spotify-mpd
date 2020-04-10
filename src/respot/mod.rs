@@ -11,6 +11,7 @@ use librespot::playback::player::Player;
 use crate::respot::player_worker::PlayerWorker;
 use core::fmt;
 use librespot::playback::config::Bitrate::Bitrate320;
+use futures::channel::mpsc;
 
 #[derive(Debug)]
 pub enum PlayerCommand {
@@ -46,7 +47,7 @@ pub struct Respot {
     cancel_signal: IoStream<()>
 }
 impl Respot {
-    pub fn new(session: Session, command_receiver: std::sync::mpsc::Receiver<PlayerCommand>, event_sender: std::sync::mpsc::Sender<PlayerEvent>) -> Self {
+    pub fn new(session: Session, command_receiver: mpsc::UnboundedReceiver<PlayerCommand>, event_sender: std::sync::mpsc::Sender<PlayerEvent>) -> Self {
         let respot = Self {
             cancel_signal: Box::new(tokio_signal::ctrl_c().flatten_stream())
         };
@@ -54,7 +55,7 @@ impl Respot {
 
         respot
     }
-    fn start_player(&self, session: Session, command_receiver: std::sync::mpsc::Receiver<PlayerCommand>, event_sender: std::sync::mpsc::Sender<PlayerEvent>)  {
+    fn start_player(&self, session: Session, command_receiver: mpsc::UnboundedReceiver<PlayerCommand>, event_sender: std::sync::mpsc::Sender<PlayerEvent>)  {
         thread::spawn(move || {
             let create_mixer = librespot::playback::mixer::find(Some("softvol".to_owned()))
                 .expect("Unable to create softvol mixer");

@@ -19,6 +19,7 @@ use librespot::core::session::Session;
 use crate::respot::{PlayerCommand, PlayerEvent, Respot};
 use std::sync::{Mutex, Arc};
 use crate::queue::Queue;
+use futures::channel::mpsc;
 
 mod config;
 mod mpd;
@@ -48,7 +49,7 @@ async fn main() -> Result<()> {
         Some(token_info) => {
             let (spotify, token_expiry) = new_spotify_client(token_info);
 
-            let (command_sender, command_receiver) = std::sync::mpsc::channel::<PlayerCommand>();
+            let (command_sender, command_receiver) = mpsc::unbounded();
             let (event_sender, event_receiver) = std::sync::mpsc::channel::<PlayerEvent>();
             let command_sender_mutex = Arc::new(Mutex::new(command_sender));
 
