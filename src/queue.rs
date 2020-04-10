@@ -174,6 +174,7 @@ impl Queue {
     pub fn stop(&self) {
         let mut current = self.current_track.write().unwrap();
         *current = None;
+        debug!("Dispatching stop");
         self.dispatch(PlayerCommand::Stop);
     }
 
@@ -213,6 +214,11 @@ impl Queue {
             .get_since()
             .map(|t| t.elapsed().unwrap())
             .unwrap_or(Duration::from_secs(0))
+    }
+
+    pub fn set_volume(&self, vol: u16) {
+        debug!("Dispatching set volume");
+        self.dispatch(PlayerCommand::SetVolume(vol));
     }
 
     fn set_elapsed(&self, new_elapsed: Option<Duration>) {

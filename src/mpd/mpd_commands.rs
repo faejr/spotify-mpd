@@ -368,4 +368,21 @@ impl MpdCommand for CurrentSongCommand {
     }
 }
 
-// TODO: SetVolCommand
+pub struct SetVolCommand {
+    queue: Arc<Queue>
+}
+impl SetVolCommand {
+    pub fn new(queue: Arc<Queue>) -> Self {
+        Self { queue }
+    }
+}
+#[async_trait]
+impl MpdCommand for SetVolCommand {
+    async fn execute(&self, args: Option<Captures<'_>>) -> Result<Vec<String>, Error> {
+        let volume_level = &args.unwrap()[1];
+
+        self.queue.set_volume(volume_level.parse::<u16>().unwrap());
+
+        Ok(vec![])
+    }
+}

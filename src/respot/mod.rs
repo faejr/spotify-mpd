@@ -10,11 +10,13 @@ use tokio_signal::IoStream;
 use librespot::playback::player::Player;
 use crate::respot::player_worker::PlayerWorker;
 use core::fmt;
+use librespot::playback::config::Bitrate::Bitrate320;
 
 #[derive(Debug)]
 pub enum PlayerCommand {
     Load(String),
     Seek(u32),
+    SetVolume(u16),
     NextTrack,
     PreviousTrack,
     Stop,
@@ -54,14 +56,19 @@ impl Respot {
     }
     fn start_player(&self, session: Session, command_receiver: std::sync::mpsc::Receiver<PlayerCommand>, event_sender: std::sync::mpsc::Sender<PlayerEvent>)  {
         thread::spawn(move || {
-            let player_config = PlayerConfig::default();
+            let create_mixer = librespot::playback::mixer::find(Some("softvol".to_owned()))
+                .expect("Unable to create softvol mixer");
+            let mixer = create_mixer(None);
+
+            let mut player_config = PlayerConfig::default();
+            player_config.bitrate = Bitrate320;
             let backend = audio_backend::find(None).unwrap();
-            let (player, _) = Player::new(player_config, session.clone(), None, move || {
+            let (player, _) = Player::new(player_config, session.clone(), mixer.get_audio_filter(), move || {
                 (backend)(None)
             });
 
             let mut core = Core::new().unwrap();
-            let player_worker = PlayerWorker::new(player, command_receiver, event_sender);
+            let player_worker = PlayerWorker::new(player, mixer, command_receiver, event_sender);
 
             debug!("Connected");
             core.run(futures::compat::Compat::new(player_worker)).unwrap();

@@ -83,6 +83,7 @@ impl MpdRequestHandler {
         commands.insert("clear", Box::new(ClearCommand::new(Arc::clone(&self.queue))));
         commands.insert("playlistinfo", Box::new(PlaylistInfoCommand::new(Arc::clone(&self.queue))));
         commands.insert("currentsong", Box::new(CurrentSongCommand::new(Arc::clone(&self.queue))));
+        commands.insert("setvol", Box::new(SetVolCommand::new(Arc::clone(&self.queue))));
 
         commands
     }
