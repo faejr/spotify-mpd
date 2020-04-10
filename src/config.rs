@@ -11,8 +11,9 @@ pub struct Config {
 #[derive(Debug, Deserialize)]
 pub struct SpotifyConfig {
     pub client_id: Option<String>,
-    pub client_secret: Option<String>,
     pub port: Option<u16>,
+    pub username: Option<String>,
+    pub password: Option<String>
 }
 
 #[derive(Debug, Deserialize)]
@@ -30,6 +31,6 @@ impl Config {
     }
 
     pub fn get_redirect_uri(&self) -> String {
-        format!("https://login.spotilocal.com:{}/callback", self.spotify.as_ref().unwrap().port.unwrap())
+        format!("http://127.0.0.1:{}/callback", self.spotify.as_ref().unwrap().port.unwrap())
     }
 }

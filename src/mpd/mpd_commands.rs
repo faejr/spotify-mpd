@@ -4,10 +4,12 @@ use rspotify::model::artist::SimplifiedArtist;
 use async_trait::async_trait;
 use anyhow::{Error, Result};
 use std::sync::Arc;
+use crate::queue::Queue;
+use regex::Captures;
 
 #[async_trait]
 pub trait MpdCommand {
-    async fn execute(&self, command: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error>;
+    async fn execute(&self, args: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error>;
 }
 
 pub struct StatusCommand;
@@ -72,6 +74,7 @@ impl MpdCommand for ListPlaylistsCommand {
 pub struct ListPlaylistInfoCommand {
     pub(crate) spotify: Arc<Spotify>
 }
+// TODO: Walk through each track page to find all songs
 #[async_trait]
 impl MpdCommand for ListPlaylistInfoCommand {
     async fn execute(&self, args: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error> {
@@ -99,7 +102,7 @@ impl MpdCommand for ListPlaylistInfoCommand {
                                     if track.is_local {
                                         break;
                                     }
-                                    string_builder.push(format!("file: {}", track.external_urls["spotify"]));
+                                    string_builder.push(format!("file: {}", track.id.unwrap()));
                                     string_builder.push(format!("Last-Modified: {}", track.album.release_date.unwrap()));
                                     string_builder.push(format!("Artist: {}", self.get_artists(track.artists)));
                                     string_builder.push(format!("AlbumArtist: {}", self.get_artists(track.album.artists)));
@@ -157,5 +160,29 @@ impl ListPlaylistInfoCommand {
         let artists_vec: Vec<String> = artists.iter().map(|x| x.name.to_owned()).collect();
 
         artists_vec.join(";")
+    }
+}
+
+pub struct AddCommand {
+    queue: Arc<Queue>,
+    spotify: Arc<Spotify>
+}
+#[async_trait]
+impl MpdCommand for AddCommand {
+    async fn execute(&self, args: Option<Captures<'_>>) -> Result<Vec<String>, Error> {
+        let track_id = &args.unwrap()[1];
+        let track_result = self.spotify.track(track_id).await?;
+        // This is a full track, need to fix that
+        info!("{}", track_id);
+
+        Ok(vec![])
+    }
+}
+impl AddCommand {
+    pub fn new(queue: Arc<Queue>, spotify: Arc<Spotify>) -> Self {
+        Self {
+            queue,
+            spotify
+        }
     }
 }

@@ -7,19 +7,22 @@ use rspotify::client::Spotify;
 use regex::Regex;
 use anyhow::{Result, Error};
 use std::sync::Arc;
+use crate::queue::Queue;
 
 mod mpd_commands;
 
 pub(crate) struct MpdServer<'a> {
     host: &'a str,
-    spotify: Arc<Spotify>
+    spotify: Arc<Spotify>,
+    queue: Arc<Queue>
 }
 
 impl MpdServer<'static> {
-    pub fn new(host: &'static str, spotify: Arc<Spotify>) -> Self {
+    pub fn new(host: &'static str, spotify: Arc<Spotify>, queue: Arc<Queue>) -> Self {
         Self {
             host,
-            spotify
+            spotify,
+            queue
         }
     }
 
@@ -32,8 +35,10 @@ impl MpdServer<'static> {
                 Ok(stream) => {
                     println!("New connection: {}", stream.peer_addr().unwrap());
                     let spotify = Arc::clone(&self.spotify);
+                    let queue = Arc::clone(&self.queue);
+
                     thread::spawn(move|| {
-                        let mut mpd_handler = MpdRequestHandler::new(spotify);
+                        let mut mpd_handler = MpdRequestHandler::new(spotify, queue);
                         mpd_handler.handle_client(stream)
                     });
                 }
@@ -50,13 +55,15 @@ impl MpdServer<'static> {
 
 struct MpdRequestHandler {
     commands: HashMap<&'static str, Box<dyn MpdCommand + 'static>>,
-    spotify: Arc<Spotify>
+    spotify: Arc<Spotify>,
+    queue: Arc<Queue>
 }
 
 impl MpdRequestHandler {
-    pub fn new(spotify: Arc<Spotify>) -> Self{
+    pub fn new(spotify: Arc<Spotify>, queue: Arc<Queue>) -> Self{
         Self {
             spotify,
+            queue,
             commands: HashMap::new()
         }
     }
@@ -67,6 +74,7 @@ impl MpdRequestHandler {
         commands.insert("stats", Box::new(StatsCommand{}));
         commands.insert("listplaylists", Box::new(ListPlaylistsCommand{ spotify: Arc::clone(&self.spotify) }));
         commands.insert("listplaylistinfo", Box::new(ListPlaylistInfoCommand{ spotify: Arc::clone(&self.spotify) }));
+        commands.insert("add", Box::new(AddCommand::new(Arc::clone(&self.queue), Arc::clone(&self.spotify))));
 
         commands
     }
@@ -104,14 +112,33 @@ impl MpdRequestHandler {
     async fn execute_command(&self, stream: &mut TcpStream, command_list: Vec<String>) {
         let mut output = vec![];
         for command in command_list {
-            println!("Server received {:?}", command);
+            println!("-> {:?}", command);
             match self.do_command(command).await {
                 Ok(result) => output.extend(result),
                 _ => {}
             }
+            if self.has_error(&output) {
+                break
+            }
         }
-        output.push("OK\n".to_owned());
+        if self.has_error(&output) {
+            println!("< {}", output.last().unwrap());
+        } else {
+            output.push("OK\n".to_owned());
+            println!("< OK");
+        }
+
         stream.write(output.join("\n").as_bytes()).unwrap();
+    }
+
+    fn has_error (&self, output: &Vec<String>) -> bool {
+        for s in output {
+            if s.starts_with("ACK") {
+                return true
+            }
+        }
+
+        false
     }
 
     async fn do_command (&self, command: String) -> Result<Vec<String>, Error> {
@@ -131,9 +158,6 @@ impl MpdRequestHandler {
 
         let mut output = vec![];
 
-        //if command.starts_with("add") && command.starts_with("play") || command == "command_list_begin" || command == "clear" || command.starts_with("plchanges") || command == "noidle" || command == "channels" || command == "playlistinfo" || command == "currentsong" || command.starts_with("replay_gain_mode") {
-        //    stream.write(b"OK\n");
-        //}
         if command.starts_with("lsinfo") {
             //stream.write(b"ACK [5@0] {lsinfo} Unsupported URI scheme");
         }

@@ -1,3 +1,8 @@
-spotify_client_id=""
-spotify_client_secret=""
-spotify_client_redirect_uri="http://localhost:1337/"
+[spotify]
+client_id="f8edeb3f6c3c4d6a842a223ddfd20f4d" # Spotify MPD client id. Can be replaced by your own.
+username=""
+password=""
+port=8080
+
+[mpd]
+port=6600
