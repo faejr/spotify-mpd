@@ -2163,43 +2163,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rust-mpd-server"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "base64 0.10.1",
- "chrono",
- "env_logger",
- "futures 0.1.29",
- "futures 0.3.4",
- "getopts",
- "hex",
- "hyper 0.11.27",
- "lazy_static",
- "librespot",
- "log 0.4.8",
- "num-bigint",
- "protobuf",
- "rand 0.7.3",
- "regex",
- "rpassword",
- "rspotify",
- "serde",
- "sha-1",
- "strum",
- "strum_macros",
- "tokio 0.2.16",
- "tokio-core",
- "tokio-io",
- "tokio-process",
- "tokio-signal",
- "tokio-timer",
- "toml",
- "url 1.7.2",
-]
-
-[[package]]
 name = "rustc-demangle"
 version = "0.1.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2452,6 +2415,43 @@ dependencies = [
  "libc",
  "redox_syscall",
  "winapi 0.3.8",
+]
+
+[[package]]
+name = "spotify-mpd"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "base64 0.10.1",
+ "chrono",
+ "env_logger",
+ "futures 0.1.29",
+ "futures 0.3.4",
+ "getopts",
+ "hex",
+ "hyper 0.11.27",
+ "lazy_static",
+ "librespot",
+ "log 0.4.8",
+ "num-bigint",
+ "protobuf",
+ "rand 0.7.3",
+ "regex",
+ "rpassword",
+ "rspotify",
+ "serde",
+ "sha-1",
+ "strum",
+ "strum_macros",
+ "tokio 0.2.16",
+ "tokio-core",
+ "tokio-io",
+ "tokio-process",
+ "tokio-signal",
+ "tokio-timer",
+ "toml",
+ "url 1.7.2",
 ]
 
 [[package]]

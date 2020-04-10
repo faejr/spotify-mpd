@@ -1,5 +1,5 @@
 [package]
-name = "rust-mpd-server"
+name = "spotify-mpd"
 version = "0.1.0"
 authors = ["Daniel Liljeberg <liljebergxyz@gmail.com>"]
 edition = "2018"
