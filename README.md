@@ -13,6 +13,7 @@ Created with the motivation to not be confined to Spotify's resource heavy deskt
 * Fix auto refresh of spotify token
 * Implement repeat queue
 * Implement shuffle queue
+* Implement consume queue
 * Implement `seekid` command
 * Implement `move` command
 * Find out what other commands we need to implement

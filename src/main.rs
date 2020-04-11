@@ -4,9 +4,6 @@ extern crate regex;
 #[macro_use]
 extern crate log;
 
-extern crate strum;
-extern crate strum_macros;
-
 use crate::spotify::{new_spotify_client, get_token_auto, SCOPES};
 use crate::config::Config;
 use rspotify::oauth2::SpotifyOAuth;
@@ -19,7 +16,6 @@ use crate::respot::{PlayerEvent, Respot};
 use std::sync::{Mutex, Arc};
 use crate::queue::Queue;
 use futures::channel::mpsc;
-use std::borrow::Borrow;
 
 mod config;
 mod mpd;
@@ -75,7 +71,7 @@ async fn main() -> Result<()> {
                 mpd_server.run();
             });
 
-            core.run(Respot::new(session, command_receiver, event_sender)).unwrap();
+            core.run(futures::compat::Compat::new(Respot::new(session, command_receiver, event_sender))).unwrap();
         }
         None => error!("Spotify auth failed"),
     }

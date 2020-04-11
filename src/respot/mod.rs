@@ -12,6 +12,8 @@ use crate::respot::player_worker::PlayerWorker;
 use core::fmt;
 use librespot::playback::config::Bitrate::Bitrate320;
 use futures::channel::mpsc;
+use std::pin::Pin;
+use futures::task::{Context, Poll};
 
 #[derive(Debug)]
 pub enum PlayerCommand {
@@ -58,7 +60,7 @@ impl Respot {
     fn start_player(&self, session: Session, command_receiver: mpsc::UnboundedReceiver<PlayerCommand>, event_sender: std::sync::mpsc::Sender<PlayerEvent>) {
         thread::spawn(move || {
             let create_mixer = librespot::playback::mixer::find(Some("softvol".to_owned()))
-                .expect("Unable to create softvol mixer");
+                .expect("Unable to find softvol mixer");
             let mixer = create_mixer(None);
 
             let mut player_config = PlayerConfig::default();
@@ -77,18 +79,17 @@ impl Respot {
     }
 }
 
-impl Future for Respot {
-    type Item = ();
-    type Error = ();
+impl futures::Future for Respot {
+    type Output = Result<(), ()>;
 
-    fn poll(&mut self) -> futures_01::Poll<(), ()> {
+    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context) -> Poll<Self::Output> {
         loop {
             if let Async::Ready(Some(())) = self.cancel_signal.poll().unwrap() {
                 debug!("Ctrl-C received");
                 std::process::exit(0);
             };
 
-            return Ok(Async::NotReady);
+            return Poll::Pending;
         }
     }
 }
