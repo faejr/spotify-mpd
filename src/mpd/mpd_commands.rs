@@ -49,7 +49,7 @@ impl MpdCommand for StatusCommand {
                 output_strings.push(format!("song: {}", songid));
                 output_strings.push(format!("songid: {}", songid));
             }
-            let elapsed = self.queue.get_current_progress();
+            let elapsed = self.queue.get_current_elapsed_time();
             let duration = self.queue.get_duration();
             output_strings.push(format!("time: {}:{}", elapsed.as_secs(), duration));
             output_strings.push(format!("elapsed: {}", elapsed.as_secs_f32()));

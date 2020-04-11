@@ -101,6 +101,7 @@ impl Queue {
             self.stop();
             return;
         }
+
         let current = *self.current_track.read().unwrap();
         if let Some(current_track) = current {
             match current_track.cmp(&index) {
@@ -193,7 +194,7 @@ impl Queue {
         0
     }
 
-    pub fn get_current_progress(&self) -> Duration {
+    pub fn get_current_elapsed_time(&self) -> Duration {
         self.get_elapsed().unwrap_or(Duration::from_secs(0))
             + self
             .get_since()
@@ -264,14 +265,14 @@ impl QueueWorker {
     fn handle_event(&self, event: PlayerEvent) {
         match event {
             PlayerEvent::Paused => {
-                self.queue.set_elapsed(Some(self.queue.get_current_progress()));
+                self.queue.set_elapsed(Some(self.queue.get_current_elapsed_time()));
                 self.queue.set_since(None);
             }
             PlayerEvent::Playing => {
                 self.queue.set_since(Some(SystemTime::now()));
                 info!("Received a playing event!");
             }
-            PlayerEvent::FinishedTrack => {
+            PlayerEvent::EndOfTrack => {
                 debug!("Finished track!");
                 self.queue.set_elapsed(None);
                 self.queue.set_since(None);

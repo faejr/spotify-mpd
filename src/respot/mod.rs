@@ -27,7 +27,7 @@ pub enum PlayerCommand {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum PlayerEvent {
-    FinishedTrack,
+    EndOfTrack,
     Playing,
     Stopped,
     Paused,
@@ -53,11 +53,12 @@ impl Respot {
         let respot = Self {
             cancel_signal: Box::new(tokio_signal::ctrl_c().flatten_stream())
         };
-        respot.start_player(session, command_receiver, event_sender);
+        Self::start_player(session, command_receiver, event_sender);
 
         respot
     }
-    fn start_player(&self, session: Session, command_receiver: mpsc::UnboundedReceiver<PlayerCommand>, event_sender: std::sync::mpsc::Sender<PlayerEvent>) {
+
+    fn start_player(session: Session, command_receiver: mpsc::UnboundedReceiver<PlayerCommand>, event_sender: std::sync::mpsc::Sender<PlayerEvent>) {
         thread::spawn(move || {
             let create_mixer = librespot::playback::mixer::find(Some("softvol".to_owned()))
                 .expect("Unable to find softvol mixer");

@@ -176,9 +176,6 @@ impl MpdRequestHandler {
 
         let mut output = vec![];
 
-        if command.starts_with("lsinfo") {
-            //stream.write(b"ACK [5@0] {lsinfo} Unsupported URI scheme");
-        }
         if command == "urlhandlers" {
             output.push("handler: spotify:");
         }

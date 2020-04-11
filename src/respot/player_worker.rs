@@ -97,7 +97,7 @@ impl futures::Future for PlayerWorker {
                 Poll::Ready(Ok(())) => {
                     debug!("player: PlayerState::EndOfTrack");
                     progress = true;
-                    self.event_sender.send(PlayerEvent::FinishedTrack).unwrap();
+                    self.event_sender.send(PlayerEvent::EndOfTrack).unwrap();
                 }
                 Poll::Ready(Err(Canceled)) => {
                     debug!("player task cancelled");
