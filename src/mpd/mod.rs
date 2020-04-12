@@ -13,27 +13,28 @@ mod mpd_commands;
 
 pub struct Client {
     spotify: Arc<Spotify>,
-    queue: Arc<Queue>
+    queue: Arc<Queue>,
 }
+
 impl Client {
     fn new(spotify: Arc<Spotify>, queue: Arc<Queue>) -> Self {
         Self {
             spotify,
-            queue
+            queue,
         }
     }
 }
 
 pub(crate) struct MpdServer {
     host: String,
-    handler: Arc<MpdRequestHandler>
+    handler: Arc<MpdRequestHandler>,
 }
 
 impl MpdServer {
     pub fn new(host: String, spotify: Arc<Spotify>, queue: Arc<Queue>) -> Self {
         Self {
             host,
-            handler: Arc::new(MpdRequestHandler::new(Arc::new(Client::new(spotify, queue))))
+            handler: Arc::new(MpdRequestHandler::new(Arc::new(Client::new(spotify, queue)))),
         }
     }
 
@@ -46,7 +47,7 @@ impl MpdServer {
                 Ok(stream) => {
                     println!("New connection: {}", stream.peer_addr().unwrap());
 
-                    let mut handler = Arc::clone(&self.handler);
+                    let handler = Arc::clone(&self.handler);
                     thread::spawn(move || {
                         handler.handle_client(stream)
                     });
@@ -63,41 +64,38 @@ impl MpdServer {
 }
 
 struct MpdRequestHandler {
-    commands: HashMap<&'static str, Box<dyn MpdCommand + 'static + Sync + Send>>,
-    client: Arc<Client>
+    commands: Vec<Box<dyn MpdCommand + 'static + Sync + Send>>,
+    client: Arc<Client>,
 }
 
 impl MpdRequestHandler {
     pub fn new(client: Arc<Client>) -> Self {
         let mut handler = Self {
             client,
-            commands: HashMap::new(),
+            commands: vec![],
         };
         handler.commands = handler.commands();
 
         handler
     }
 
-    fn commands(&self) -> HashMap<&'static str, Box<dyn MpdCommand + Sync + Send>> {
-        let mut commands: HashMap<&'static str, Box<dyn MpdCommand + Sync + Send>> = HashMap::new();
-        commands.insert("status", Box::new(StatusCommand{}));
-        commands.insert("stats", Box::new(StatsCommand{}));
-        commands.insert("listplaylists", Box::new(ListPlaylistsCommand{}));
-        commands.insert("listplaylistinfo", Box::new(ListPlaylistInfoCommand{}));
-        commands.insert("add", Box::new(AddCommand{}));
-        commands.insert("addid", Box::new(AddCommand{}));
-        commands.insert("play", Box::new(PlayCommand{}));
-        commands.insert("playid", Box::new(PlayCommand{}));
-        commands.insert("pause", Box::new(PauseCommand{}));
-        commands.insert("next", Box::new(NextCommand{}));
-        commands.insert("prev", Box::new(PrevCommand{}));
-        commands.insert("clear", Box::new(ClearCommand{}));
-        commands.insert("playlistinfo", Box::new(PlaylistInfoCommand{}));
-        commands.insert("plchanges", Box::new(PlaylistInfoCommand{}));
-        commands.insert("currentsong", Box::new(CurrentSongCommand{}));
-        commands.insert("setvol", Box::new(SetVolCommand{}));
-        commands.insert("volume", Box::new(VolumeCommand{}));
-        commands.insert("deleteid", Box::new(DeleteIdCommand{}));
+    fn commands(&self) -> Vec<Box<dyn MpdCommand + Sync + Send>> {
+        let mut commands: Vec<Box<dyn MpdCommand + Sync + Send>> = vec![];
+        commands.push(Box::new(StatusCommand {}));
+        commands.push(Box::new(StatsCommand {}));
+        commands.push(Box::new(ListPlaylistsCommand {}));
+        commands.push(Box::new(ListPlaylistInfoCommand {}));
+        commands.push(Box::new(AddCommand {}));
+        commands.push(Box::new(PlayCommand {}));
+        commands.push(Box::new(PauseCommand {}));
+        commands.push(Box::new(NextCommand {}));
+        commands.push(Box::new(PrevCommand {}));
+        commands.push(Box::new(ClearCommand {}));
+        commands.push(Box::new(PlaylistInfoCommand {}));
+        commands.push(Box::new(CurrentSongCommand {}));
+        commands.push(Box::new(SetVolCommand {}));
+        commands.push(Box::new(VolumeCommand {}));
+        commands.push(Box::new(DeleteIdCommand {}));
 
         commands
     }
@@ -173,10 +171,11 @@ impl MpdRequestHandler {
             .next()
             .unwrap_or("");
         println!("Command name: {}", command_name);
-        for (name, mpd_command) in &self.commands {
-            if command_name.eq(*name) {
+        for mpd_command in &self.commands {
+            if mpd_command.get_type().contains(&command_name) {
                 let args: Option<regex::Captures<'_>> = RE.captures(&command);
                 let client = Arc::clone(&self.client);
+                
                 return match mpd_command.execute(client, args).await {
                     Ok(cmd) => Ok(cmd),
                     Err(e) => Err(e)
