@@ -7,11 +7,12 @@ use crate::track::Track;
 use std::str::FromStr;
 use crate::respot::PlayerEvent;
 use crate::mpd::Client;
+use regex::Captures;
 
 #[async_trait]
 pub trait MpdCommand {
     fn get_type(&self) -> Vec<&str>;
-    async fn execute(&self, client: Arc<Client>, args: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error>;
+    async fn handle(&self, client: Arc<Client>, args: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error>;
 }
 
 pub struct StatusCommand;
@@ -22,7 +23,7 @@ impl MpdCommand for StatusCommand {
         vec!["status"]
     }
 
-    async fn execute(&self, client: Arc<Client>, _: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error> {
+    async fn handle(&self, client: Arc<Client>, _: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error> {
         let mut output = vec![];
         output.push("repeat: 0");
         output.push("random: 0");
@@ -63,7 +64,7 @@ impl MpdCommand for StatsCommand {
         vec!["stats"]
     }
 
-    async fn execute(&self, _: Arc<Client>, _: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error> {
+    async fn handle(&self, _: Arc<Client>, _: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error> {
         let mut output = vec![];
         output.push("uptime: 0");
         output.push("playtime: 0");
@@ -80,7 +81,7 @@ impl MpdCommand for ListPlaylistsCommand {
         vec!["listplaylists"]
     }
 
-    async fn execute(&self, client: Arc<Client>, _: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error> {
+    async fn handle(&self, client: Arc<Client>, _: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error> {
         let playlists_result = client.spotify.current_user_playlists(None, None).await;
         let mut string_builder = vec![];
 
@@ -109,7 +110,7 @@ impl MpdCommand for ListPlaylistInfoCommand {
         vec!["listplaylistinfo"]
     }
 
-    async fn execute(&self, client: Arc<Client>, args: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error> {
+    async fn handle(&self, client: Arc<Client>, args: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error> {
         let playlist_name = &args.unwrap()[1];
 
         let simplified_playlist = self.get_playlist_by_name(Arc::clone(&client), playlist_name).await;
@@ -203,7 +204,7 @@ impl MpdCommand for AddCommand {
         vec!["add", "addid"]
     }
 
-    async fn execute(&self, client: Arc<Client>, args: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error> {
+    async fn handle(&self, client: Arc<Client>, args: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error> {
         let mut output = vec![];
         let track_id = &args.unwrap()[1];
         let track_result = client.spotify.track(track_id).await;
@@ -228,7 +229,7 @@ impl MpdCommand for PlayCommand {
         vec!["play", "playid"]
     }
 
-    async fn execute(&self, client: Arc<Client>, args: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error> {
+    async fn handle(&self, client: Arc<Client>, args: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error> {
         let index = usize::from_str(&args.unwrap()[1]).unwrap();
         client.queue.play(index);
 
@@ -244,7 +245,7 @@ impl MpdCommand for PauseCommand {
         vec!["pause"]
     }
 
-    async fn execute(&self, client: Arc<Client>, _: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error> {
+    async fn handle(&self, client: Arc<Client>, _: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error> {
         client.queue.toggle_playback();
 
         Ok(vec![])
@@ -259,7 +260,7 @@ impl MpdCommand for NextCommand {
         vec!["next"]
     }
 
-    async fn execute(&self, client: Arc<Client>, _: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error> {
+    async fn handle(&self, client: Arc<Client>, _: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error> {
         client.queue.next();
 
         Ok(vec![])
@@ -274,7 +275,7 @@ impl MpdCommand for PrevCommand {
         vec!["prev"]
     }
 
-    async fn execute(&self, client: Arc<Client>, _: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error> {
+    async fn handle(&self, client: Arc<Client>, _: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error> {
         client.queue.previous();
 
         Ok(vec![])
@@ -289,7 +290,7 @@ impl MpdCommand for ClearCommand {
         vec!["clear"]
     }
 
-    async fn execute(&self, client: Arc<Client>, _: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error> {
+    async fn handle(&self, client: Arc<Client>, _: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error> {
         client.queue.clear();
 
         Ok(vec![])
@@ -304,7 +305,7 @@ impl MpdCommand for PlaylistInfoCommand {
         vec!["playlistinfo", "plchanges"]
     }
 
-    async fn execute(&self, client: Arc<Client>, _: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error> {
+    async fn handle(&self, client: Arc<Client>, _: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error> {
         let mut output = vec![];
         let queue = client.queue.queue.read().unwrap();
         let mut pos = 0;
@@ -325,7 +326,7 @@ impl MpdCommand for CurrentSongCommand {
         vec!["currentsong"]
     }
 
-    async fn execute(&self, client: Arc<Client>, _: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error> {
+    async fn handle(&self, client: Arc<Client>, _: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error> {
         let mut output = vec![];
         if let Some(current_track) = client.queue.get_current() {
             output = current_track.to_mpd_format(0);
@@ -343,7 +344,7 @@ impl MpdCommand for SetVolCommand {
         vec!["setvol"]
     }
 
-    async fn execute(&self, client: Arc<Client>, args: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error> {
+    async fn handle(&self, client: Arc<Client>, args: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error> {
         let volume_level = &args.unwrap()[1];
 
         client.queue.set_volume(volume_level.parse::<u16>().unwrap());
@@ -360,7 +361,7 @@ impl MpdCommand for VolumeCommand {
         vec!["volume"]
     }
 
-    async fn execute(&self, client: Arc<Client>, args: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error> {
+    async fn handle(&self, client: Arc<Client>, args: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error> {
         let volume_level_str = &args.unwrap()[1];
         println!("{:?}", volume_level_str);
         let volume_level = volume_level_str.parse::<i16>().unwrap();
@@ -379,7 +380,7 @@ impl MpdCommand for DeleteIdCommand {
         vec!["deleteid"]
     }
 
-    async fn execute(&self, client: Arc<Client>, args: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error> {
+    async fn handle(&self, client: Arc<Client>, args: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error> {
         let song_id_arg = &args.unwrap()[1];
 
         if let Ok(song_id) = usize::from_str(song_id_arg) {
@@ -387,5 +388,88 @@ impl MpdCommand for DeleteIdCommand {
         }
 
         Ok(vec![])
+    }
+}
+
+pub struct UrlHandlersCommand;
+
+#[async_trait]
+impl MpdCommand for UrlHandlersCommand {
+    fn get_type(&self) -> Vec<&str> {
+        vec!["urlhandlers"]
+    }
+
+    async fn handle(&self, _: Arc<Client>, _: Option<Captures<'_>>) -> Result<Vec<String>, Error> {
+        Ok(vec!["handler: spotify:".to_owned()])
+    }
+}
+
+pub struct OutputsCommand;
+
+#[async_trait]
+impl MpdCommand for OutputsCommand {
+    fn get_type(&self) -> Vec<&str> {
+        vec!["outputs"]
+    }
+
+    async fn handle(&self, _: Arc<Client>, _: Option<Captures<'_>>) -> Result<Vec<String>, Error> {
+        let mut output = vec![];
+
+        output.push("outputsoutputid: 0");
+        output.push("outputname: default detected output");
+        output.push("plugin: alsa");
+        output.push("outputenabled: 1");
+        output.push("attribute: allowed_formats=");
+        output.push("attribute: dop=0");
+
+        Ok(output.iter().map(|x| x.to_string()).collect::<Vec<String>>().into())
+    }
+}
+
+pub struct DecodersCommand;
+
+#[async_trait]
+impl MpdCommand for DecodersCommand {
+    fn get_type(&self) -> Vec<&str> {
+        vec!["outputs"]
+    }
+
+    async fn handle(&self, _: Arc<Client>, _: Option<Captures<'_>>) -> Result<Vec<String>, Error> {
+        let mut output = vec![];
+
+        output.push("plugin: mad");
+        output.push("suffix: mp3");
+        output.push("suffix: mp2");
+        output.push("mime_type: audio/mpeg");
+        output.push("plugin: mpcdec");
+        output.push("suffix: mpc");
+
+        Ok(output.iter().map(|x| x.to_string()).collect::<Vec<String>>().into())
+    }
+}
+
+pub struct TagTypesCommand;
+
+#[async_trait]
+impl MpdCommand for TagTypesCommand {
+    fn get_type(&self) -> Vec<&str> {
+        vec!["tagtypes"]
+    }
+
+    async fn handle(&self, _: Arc<Client>, _: Option<Captures<'_>>) -> Result<Vec<String>, Error> {
+        let mut output = vec![];
+
+        output.push("tagtype: Artist");
+        output.push("tagtype: ArtistSort");
+        output.push("tagtype: Album");
+        output.push("tagtype: AlbumSort");
+        output.push("tagtype: AlbumArtist");
+        output.push("tagtype: AlbumArtistSort");
+        output.push("tagtype: Title");
+        output.push("tagtype: Name");
+        output.push("tagtype: Genre");
+        output.push("tagtype: Date");
+
+        Ok(output.iter().map(|x| x.to_string()).collect::<Vec<String>>().into())
     }
 }

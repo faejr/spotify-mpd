@@ -1,7 +1,6 @@
 use std::net::{TcpListener, TcpStream};
 use std::thread;
 use std::io::{Write, BufReader, BufRead};
-use std::collections::HashMap;
 use crate::mpd::mpd_commands::*;
 use rspotify::client::Spotify;
 use regex::Regex;
@@ -96,6 +95,10 @@ impl MpdRequestHandler {
         commands.push(Box::new(SetVolCommand {}));
         commands.push(Box::new(VolumeCommand {}));
         commands.push(Box::new(DeleteIdCommand {}));
+        commands.push(Box::new(UrlHandlersCommand {}));
+        commands.push(Box::new(OutputsCommand {}));
+        commands.push(Box::new(DecodersCommand {}));
+        commands.push(Box::new(TagTypesCommand {}));
 
         commands
     }
@@ -106,34 +109,39 @@ impl MpdRequestHandler {
         stream.write(welcome).expect("Unable to send OK msg");
 
         loop {
-            let mut reader = BufReader::new(&stream);
-            let mut response = String::new();
-            let mut command_list = vec![];
-            reader.read_line(&mut response).expect("could not read");
-
-            if response.trim() == "command_list_begin" {
-                while response.trim() != "command_list_end" {
-                    response = String::new();
-                    reader.read_line(&mut response).expect("could not read");
-                    if response.trim() != "command_list_end" {
-                        command_list.push(response.trim().to_owned());
-                    }
-                }
-            } else if response.len() > 0 && response.trim() != "idle" {
-                command_list.push(response.trim().to_owned());
-            }
+            let command_list = self.get_command_list(&mut stream);
 
             if command_list.len() > 0 {
-                self.execute_command(&mut stream, command_list).await;
+                self.run_commands(&mut stream, command_list).await;
             }
         }
     }
 
-    async fn execute_command(&self, stream: &mut TcpStream, command_list: Vec<String>) {
+    fn get_command_list(&self, stream: &mut TcpStream) -> Vec<String> {
+        let mut reader = BufReader::new(stream);
+        let mut response = String::new();
+        let mut command_list = vec![];
+        reader.read_line(&mut response).expect("could not read");
+        if response.trim() == "command_list_begin" {
+            while response.trim() != "command_list_end" {
+                response = String::new();
+                reader.read_line(&mut response).expect("could not read");
+                if response.trim() != "command_list_end" {
+                    command_list.push(response.trim().to_owned());
+                }
+            }
+        } else if response.len() > 0 && response.trim() != "idle" {
+            command_list.push(response.trim().to_owned());
+        }
+
+        command_list
+    }
+
+    async fn run_commands(&self, stream: &mut TcpStream, command_list: Vec<String>) {
         let mut output = vec![];
         for command in command_list {
             println!("-> {:?}", command);
-            match self.do_command(command).await {
+            match self.execute_command(command).await {
                 Ok(result) => output.extend(result),
                 _ => {}
             }
@@ -161,7 +169,7 @@ impl MpdRequestHandler {
         false
     }
 
-    async fn do_command(&self, command: String) -> Result<Vec<String>, Error> {
+    async fn execute_command(&self, command: String) -> Result<Vec<String>, Error> {
         lazy_static! {
             static ref RE: Regex = Regex::new("\\s+\"?([^\"]*)\"?").unwrap();
         }
@@ -170,13 +178,12 @@ impl MpdRequestHandler {
             .split_whitespace()
             .next()
             .unwrap_or("");
-        println!("Command name: {}", command_name);
         for mpd_command in &self.commands {
             if mpd_command.get_type().contains(&command_name) {
                 let args: Option<regex::Captures<'_>> = RE.captures(&command);
                 let client = Arc::clone(&self.client);
-                
-                return match mpd_command.execute(client, args).await {
+
+                return match mpd_command.handle(client, args).await {
                     Ok(cmd) => Ok(cmd),
                     Err(e) => Err(e)
                 };
@@ -184,45 +191,12 @@ impl MpdRequestHandler {
         }
 
         let mut output = vec![];
-
-        if command == "urlhandlers" {
-            output.push("handler: spotify:");
-        }
-        if command == "outputs" {
-            output.push("outputsoutputid: 0");
-            output.push("outputname: default detected output");
-            output.push("plugin: alsa");
-            output.push("outputenabled: 1");
-            output.push("attribute: allowed_formats=");
-            output.push("attribute: dop=0");
-        }
-        if command == "decoders" {
-            output.push("plugin: mad");
-            output.push("suffix: mp3");
-            output.push("suffix: mp2");
-            output.push("mime_type: audio/mpeg");
-            output.push("plugin: mpcdec");
-            output.push("suffix: mpc");
-        }
-        if command == "tagtypes" {
-            output.push("tagtype: Artist");
-            output.push("tagtype: ArtistSort");
-            output.push("tagtype: Album");
-            output.push("tagtype: AlbumSort");
-            output.push("tagtype: AlbumArtist");
-            output.push("tagtype: AlbumArtistSort");
-            output.push("tagtype: Title");
-            output.push("tagtype: Name");
-            output.push("tagtype: Genre");
-            output.push("tagtype: Date");
-        }
         if command == "commands" {
-            output.push("command: play");
-            output.push("command: stop");
-            output.push("command: pause");
-            output.push("command: status");
-            output.push("command: stats");
-            output.push("command: decoders");
+            for mpd_command in &self.commands {
+                for t in mpd_command.get_type() {
+                    output.push(format!("command: {}", t));
+                }
+            }
         }
 
         Ok(output.iter().map(|x| x.to_string()).collect::<Vec<String>>().into())
