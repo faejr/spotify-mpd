@@ -15,6 +15,7 @@ pub trait MpdCommand {
 }
 
 pub struct StatusCommand;
+
 #[async_trait]
 impl MpdCommand for StatusCommand {
     fn get_type(&self) -> Vec<&str> {
@@ -55,6 +56,7 @@ impl MpdCommand for StatusCommand {
 }
 
 pub struct StatsCommand;
+
 #[async_trait]
 impl MpdCommand for StatsCommand {
     fn get_type(&self) -> Vec<&str> {
@@ -71,6 +73,7 @@ impl MpdCommand for StatsCommand {
 }
 
 pub struct ListPlaylistsCommand;
+
 #[async_trait]
 impl MpdCommand for ListPlaylistsCommand {
     fn get_type(&self) -> Vec<&str> {
@@ -99,6 +102,7 @@ impl MpdCommand for ListPlaylistsCommand {
 }
 
 pub struct ListPlaylistInfoCommand;
+
 #[async_trait]
 impl MpdCommand for ListPlaylistInfoCommand {
     fn get_type(&self) -> Vec<&str> {
@@ -192,6 +196,7 @@ impl ListPlaylistInfoCommand {
 }
 
 pub struct AddCommand;
+
 #[async_trait]
 impl MpdCommand for AddCommand {
     fn get_type(&self) -> Vec<&str> {
@@ -216,6 +221,7 @@ impl MpdCommand for AddCommand {
 }
 
 pub struct PlayCommand;
+
 #[async_trait]
 impl MpdCommand for PlayCommand {
     fn get_type(&self) -> Vec<&str> {
@@ -231,6 +237,7 @@ impl MpdCommand for PlayCommand {
 }
 
 pub struct PauseCommand;
+
 #[async_trait]
 impl MpdCommand for PauseCommand {
     fn get_type(&self) -> Vec<&str> {
@@ -245,6 +252,7 @@ impl MpdCommand for PauseCommand {
 }
 
 pub struct NextCommand;
+
 #[async_trait]
 impl MpdCommand for NextCommand {
     fn get_type(&self) -> Vec<&str> {
@@ -259,6 +267,7 @@ impl MpdCommand for NextCommand {
 }
 
 pub struct PrevCommand;
+
 #[async_trait]
 impl MpdCommand for PrevCommand {
     fn get_type(&self) -> Vec<&str> {
@@ -273,6 +282,7 @@ impl MpdCommand for PrevCommand {
 }
 
 pub struct ClearCommand;
+
 #[async_trait]
 impl MpdCommand for ClearCommand {
     fn get_type(&self) -> Vec<&str> {
@@ -287,6 +297,7 @@ impl MpdCommand for ClearCommand {
 }
 
 pub struct PlaylistInfoCommand;
+
 #[async_trait]
 impl MpdCommand for PlaylistInfoCommand {
     fn get_type(&self) -> Vec<&str> {
@@ -307,6 +318,7 @@ impl MpdCommand for PlaylistInfoCommand {
 }
 
 pub struct CurrentSongCommand;
+
 #[async_trait]
 impl MpdCommand for CurrentSongCommand {
     fn get_type(&self) -> Vec<&str> {
@@ -324,6 +336,7 @@ impl MpdCommand for CurrentSongCommand {
 }
 
 pub struct SetVolCommand;
+
 #[async_trait]
 impl MpdCommand for SetVolCommand {
     fn get_type(&self) -> Vec<&str> {
@@ -340,6 +353,7 @@ impl MpdCommand for SetVolCommand {
 }
 
 pub struct VolumeCommand;
+
 #[async_trait]
 impl MpdCommand for VolumeCommand {
     fn get_type(&self) -> Vec<&str> {
@@ -358,6 +372,7 @@ impl MpdCommand for VolumeCommand {
 }
 
 pub struct DeleteIdCommand;
+
 #[async_trait]
 impl MpdCommand for DeleteIdCommand {
     fn get_type(&self) -> Vec<&str> {
