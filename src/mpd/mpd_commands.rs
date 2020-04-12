@@ -1,35 +1,22 @@
-use rspotify::client::Spotify;
 use rspotify::model::playlist::SimplifiedPlaylist;
 use rspotify::model::artist::SimplifiedArtist;
 use async_trait::async_trait;
 use anyhow::{Error, Result};
 use std::sync::Arc;
-use crate::queue::Queue;
-use regex::Captures;
 use crate::track::Track;
 use std::str::FromStr;
 use crate::respot::PlayerEvent;
+use crate::mpd::Client;
 
 #[async_trait]
 pub trait MpdCommand {
-    async fn execute(&self, args: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error>;
+    async fn execute(&self, client: Arc<Client>, args: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error>;
 }
 
-pub struct StatusCommand {
-    queue: Arc<Queue>
-}
-
-impl StatusCommand {
-    pub fn new(queue: Arc<Queue>) -> Self {
-        Self {
-            queue
-        }
-    }
-}
-
+pub struct StatusCommand;
 #[async_trait]
 impl MpdCommand for StatusCommand {
-    async fn execute(&self, _: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error> {
+    async fn execute(&self, client: Arc<Client>, _: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error> {
         let mut output = vec![];
         output.push("repeat: 0");
         output.push("random: 0");
@@ -39,18 +26,18 @@ impl MpdCommand for StatusCommand {
         output.push("mixrampdb: 0.00000");
 
         let mut output_strings: Vec<String> = output.iter().map(|x| x.to_string()).collect::<Vec<String>>().into();
-        output_strings.push(format!("volume: {}", self.queue.get_volume()));
-        let status = self.queue.get_status();
-        let playlist_length = self.queue.len();
+        output_strings.push(format!("volume: {}", client.queue.get_volume()));
+        let status = client.queue.get_status();
+        let playlist_length = client.queue.len();
         output_strings.push(format!("playlistlength: {}", playlist_length));
         output_strings.push(format!("state: {}", status.to_string()));
         if status == PlayerEvent::Playing || status == PlayerEvent::Paused {
-            if let Some(songid) = self.queue.get_current_index() {
+            if let Some(songid) = client.queue.get_current_index() {
                 output_strings.push(format!("song: {}", songid));
                 output_strings.push(format!("songid: {}", songid));
             }
-            let elapsed = self.queue.get_current_elapsed_time();
-            let duration = self.queue.get_duration();
+            let elapsed = client.queue.get_current_elapsed_time();
+            let duration = client.queue.get_duration();
             output_strings.push(format!("time: {}:{}", elapsed.as_secs(), duration));
             output_strings.push(format!("elapsed: {}", elapsed.as_secs_f32()));
             output_strings.push(format!("duration: {}", duration));
@@ -63,10 +50,9 @@ impl MpdCommand for StatusCommand {
 }
 
 pub struct StatsCommand;
-
 #[async_trait]
 impl MpdCommand for StatsCommand {
-    async fn execute(&self, _: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error> {
+    async fn execute(&self, client: Arc<Client>, _: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error> {
         let mut output = vec![];
         output.push("uptime: 0");
         output.push("playtime: 0");
@@ -75,14 +61,11 @@ impl MpdCommand for StatsCommand {
     }
 }
 
-pub struct ListPlaylistsCommand {
-    pub(crate) spotify: Arc<Spotify>
-}
-
+pub struct ListPlaylistsCommand;
 #[async_trait]
 impl MpdCommand for ListPlaylistsCommand {
-    async fn execute(&self, _: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error> {
-        let playlists_result = self.spotify.current_user_playlists(None, None).await;
+    async fn execute(&self, client: Arc<Client>, _: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error> {
+        let playlists_result = client.spotify.current_user_playlists(None, None).await;
         let mut string_builder = vec![];
 
         match playlists_result {
@@ -102,29 +85,18 @@ impl MpdCommand for ListPlaylistsCommand {
     }
 }
 
-pub struct ListPlaylistInfoCommand {
-    spotify: Arc<Spotify>
-}
-
-impl ListPlaylistInfoCommand {
-    pub fn new(spotify: Arc<Spotify>) -> Self {
-        Self {
-            spotify
-        }
-    }
-}
-
+pub struct ListPlaylistInfoCommand;
 #[async_trait]
 impl MpdCommand for ListPlaylistInfoCommand {
-    async fn execute(&self, args: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error> {
+    async fn execute(&self, client: Arc<Client>, args: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error> {
         let playlist_name = &args.unwrap()[1];
 
-        let simplified_playlist = self.get_playlist_by_name(playlist_name).await;
+        let simplified_playlist = self.get_playlist_by_name(Arc::clone(&client), playlist_name).await;
         let mut string_builder = vec![];
         match simplified_playlist {
             Some(playlist) => {
-                let playlist_tracks_result = self.spotify.user_playlist_tracks(
-                    &self.get_current_user_id().await?,
+                let playlist_tracks_result = client.spotify.user_playlist_tracks(
+                    &self.get_current_user_id(&client).await?,
                     &playlist.id,
                     None,
                     None,
@@ -168,8 +140,8 @@ impl MpdCommand for ListPlaylistInfoCommand {
 }
 
 impl ListPlaylistInfoCommand {
-    async fn get_playlist_by_name(&self, name: &str) -> Option<SimplifiedPlaylist> {
-        let playlists_result = self.spotify.current_user_playlists(None, None).await;
+    async fn get_playlist_by_name(&self, client: Arc<Client>, name: &str) -> Option<SimplifiedPlaylist> {
+        let playlists_result = client.spotify.current_user_playlists(None, None).await;
         match playlists_result {
             Ok(playlists) => {
                 for playlist in playlists.items {
@@ -187,8 +159,8 @@ impl ListPlaylistInfoCommand {
         None
     }
 
-    async fn get_current_user_id(&self) -> Result<String, Error> {
-        let current_user_result = self.spotify.current_user().await;
+    async fn get_current_user_id(&self, client: &Arc<Client>) -> Result<String, Error> {
+        let current_user_result = client.spotify.current_user().await;
         match current_user_result {
             Ok(current_user) => Ok(current_user.id),
             Err(e) => Err(Error::from(e.compat()))
@@ -202,21 +174,17 @@ impl ListPlaylistInfoCommand {
     }
 }
 
-pub struct AddCommand {
-    queue: Arc<Queue>,
-    spotify: Arc<Spotify>,
-}
-
+pub struct AddCommand;
 #[async_trait]
 impl MpdCommand for AddCommand {
-    async fn execute(&self, args: Option<Captures<'_>>) -> Result<Vec<String>, Error> {
+    async fn execute(&self, client: Arc<Client>, args: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error> {
         let mut output = vec![];
         let track_id = &args.unwrap()[1];
-        let track_result = self.spotify.track(track_id).await;
+        let track_result = client.spotify.track(track_id).await;
         match track_result {
             Ok(full_track) => {
                 let track = Track::from(&full_track);
-                let song_id = self.queue.append(&track);
+                let song_id = client.queue.append(&track);
                 output.push(format!("Id: {}", song_id))
             }
             Err(e) => return Err(Error::from(e.compat()))
@@ -226,136 +194,63 @@ impl MpdCommand for AddCommand {
     }
 }
 
-impl AddCommand {
-    pub fn new(queue: Arc<Queue>, spotify: Arc<Spotify>) -> Self {
-        Self {
-            queue,
-            spotify,
-        }
-    }
-}
-
-pub struct PlayCommand {
-    queue: Arc<Queue>
-}
-
-impl PlayCommand {
-    pub fn new(queue: Arc<Queue>) -> Self {
-        Self {
-            queue
-        }
-    }
-}
-
+pub struct PlayCommand;
 #[async_trait]
 impl MpdCommand for PlayCommand {
-    async fn execute(&self, args: Option<Captures<'_>>) -> Result<Vec<String>, Error> {
+    async fn execute(&self, client: Arc<Client>, args: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error> {
         let index = usize::from_str(&args.unwrap()[1]).unwrap();
-        self.queue.play(index);
+        client.queue.play(index);
 
         Ok(vec![])
     }
 }
 
-pub struct PauseCommand {
-    queue: Arc<Queue>
-}
-
-impl PauseCommand {
-    pub fn new(queue: Arc<Queue>) -> Self {
-        Self {
-            queue
-        }
-    }
-}
-
+pub struct PauseCommand;
 #[async_trait]
 impl MpdCommand for PauseCommand {
-    async fn execute(&self, _: Option<Captures<'_>>) -> Result<Vec<String>, Error> {
-        self.queue.toggle_playback();
+    async fn execute(&self, client: Arc<Client>, _: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error> {
+        client.queue.toggle_playback();
 
         Ok(vec![])
     }
 }
 
-pub struct NextCommand {
-    queue: Arc<Queue>
-}
-
-impl NextCommand {
-    pub fn new(queue: Arc<Queue>) -> Self {
-        Self {
-            queue
-        }
-    }
-}
-
+pub struct NextCommand;
 #[async_trait]
 impl MpdCommand for NextCommand {
-    async fn execute(&self, _: Option<Captures<'_>>) -> Result<Vec<String>, Error> {
-        self.queue.next();
+    async fn execute(&self, client: Arc<Client>, _: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error> {
+        client.queue.next();
 
         Ok(vec![])
     }
 }
 
-pub struct PrevCommand {
-    queue: Arc<Queue>
-}
-
-impl PrevCommand {
-    pub fn new(queue: Arc<Queue>) -> Self {
-        Self {
-            queue
-        }
-    }
-}
-
+pub struct PrevCommand;
 #[async_trait]
 impl MpdCommand for PrevCommand {
-    async fn execute(&self, _: Option<Captures<'_>>) -> Result<Vec<String>, Error> {
-        self.queue.previous();
+    async fn execute(&self, client: Arc<Client>, _: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error> {
+        client.queue.previous();
 
         Ok(vec![])
     }
 }
 
-pub struct ClearCommand {
-    queue: Arc<Queue>
-}
-
-impl ClearCommand {
-    pub fn new(queue: Arc<Queue>) -> Self {
-        Self {
-            queue
-        }
-    }
-}
-
+pub struct ClearCommand;
 #[async_trait]
 impl MpdCommand for ClearCommand {
-    async fn execute(&self, _: Option<Captures<'_>>) -> Result<Vec<String>, Error> {
-        self.queue.clear();
+    async fn execute(&self, client: Arc<Client>, _: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error> {
+        client.queue.clear();
 
         Ok(vec![])
     }
 }
 
-pub struct PlaylistInfoCommand {
-    queue: Arc<Queue>
-}
-
-impl PlaylistInfoCommand {
-    pub fn new(queue: Arc<Queue>) -> Self {
-        Self { queue }
-    }
-}
-
+pub struct PlaylistInfoCommand;
 #[async_trait]
 impl MpdCommand for PlaylistInfoCommand {
-    async fn execute(&self, _: Option<Captures<'_>>) -> Result<Vec<String>, Error> {
+    async fn execute(&self, client: Arc<Client>, _: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error> {
         let mut output = vec![];
-        let queue = self.queue.queue.read().unwrap();
+        let queue = client.queue.queue.read().unwrap();
         let mut pos = 0;
         for track in (*queue).clone() {
             output.extend(track.to_mpd_format(pos));
@@ -366,21 +261,12 @@ impl MpdCommand for PlaylistInfoCommand {
     }
 }
 
-pub struct CurrentSongCommand {
-    queue: Arc<Queue>
-}
-
-impl CurrentSongCommand {
-    pub fn new(queue: Arc<Queue>) -> Self {
-        Self { queue }
-    }
-}
-
+pub struct CurrentSongCommand;
 #[async_trait]
 impl MpdCommand for CurrentSongCommand {
-    async fn execute(&self, _: Option<Captures<'_>>) -> Result<Vec<String>, Error> {
+    async fn execute(&self, client: Arc<Client>, _: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error> {
         let mut output = vec![];
-        if let Some(current_track) = self.queue.get_current() {
+        if let Some(current_track) = client.queue.get_current() {
             output = current_track.to_mpd_format(0);
         }
 
@@ -388,67 +274,40 @@ impl MpdCommand for CurrentSongCommand {
     }
 }
 
-pub struct SetVolCommand {
-    queue: Arc<Queue>
-}
-
-impl SetVolCommand {
-    pub fn new(queue: Arc<Queue>) -> Self {
-        Self { queue }
-    }
-}
-
+pub struct SetVolCommand;
 #[async_trait]
 impl MpdCommand for SetVolCommand {
-    async fn execute(&self, args: Option<Captures<'_>>) -> Result<Vec<String>, Error> {
+    async fn execute(&self, client: Arc<Client>, args: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error> {
         let volume_level = &args.unwrap()[1];
 
-        self.queue.set_volume(volume_level.parse::<u16>().unwrap());
+        client.queue.set_volume(volume_level.parse::<u16>().unwrap());
 
         Ok(vec![])
     }
 }
 
-pub struct VolumeCommand {
-    queue: Arc<Queue>
-}
-
-impl VolumeCommand {
-    pub fn new(queue: Arc<Queue>) -> Self {
-        Self { queue }
-    }
-}
-
+pub struct VolumeCommand;
 #[async_trait]
 impl MpdCommand for VolumeCommand {
-    async fn execute(&self, args: Option<Captures<'_>>) -> Result<Vec<String>, Error> {
+    async fn execute(&self, client: Arc<Client>, args: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error> {
         let volume_level_str = &args.unwrap()[1];
         println!("{:?}", volume_level_str);
         let volume_level = volume_level_str.parse::<i16>().unwrap();
 
-        self.queue.set_volume(self.queue.get_volume().wrapping_add(volume_level as u16));
+        client.queue.set_volume(client.queue.get_volume().wrapping_add(volume_level as u16));
 
         Ok(vec![])
     }
 }
 
-pub struct DeleteIdCommand {
-    queue: Arc<Queue>
-}
-
-impl DeleteIdCommand {
-    pub fn new(queue: Arc<Queue>) -> Self {
-        Self { queue }
-    }
-}
-
+pub struct DeleteIdCommand;
 #[async_trait]
 impl MpdCommand for DeleteIdCommand {
-    async fn execute(&self, args: Option<Captures<'_>>) -> Result<Vec<String>, Error> {
+    async fn execute(&self, client: Arc<Client>, args: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error> {
         let song_id_arg = &args.unwrap()[1];
 
         if let Ok(song_id) = usize::from_str(song_id_arg) {
-            self.queue.remove(song_id);
+            client.queue.remove(song_id);
         }
 
         Ok(vec![])

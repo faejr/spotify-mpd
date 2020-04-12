@@ -11,18 +11,29 @@ use crate::queue::Queue;
 
 mod mpd_commands;
 
+pub struct Client {
+    spotify: Arc<Spotify>,
+    queue: Arc<Queue>
+}
+impl Client {
+    fn new(spotify: Arc<Spotify>, queue: Arc<Queue>) -> Self {
+        Self {
+            spotify,
+            queue
+        }
+    }
+}
+
 pub(crate) struct MpdServer {
     host: String,
-    spotify: Arc<Spotify>,
-    queue: Arc<Queue>,
+    handler: Arc<MpdRequestHandler>
 }
 
 impl MpdServer {
     pub fn new(host: String, spotify: Arc<Spotify>, queue: Arc<Queue>) -> Self {
         Self {
             host,
-            spotify,
-            queue,
+            handler: Arc::new(MpdRequestHandler::new(Arc::new(Client::new(spotify, queue))))
         }
     }
 
@@ -34,12 +45,10 @@ impl MpdServer {
             match stream {
                 Ok(stream) => {
                     println!("New connection: {}", stream.peer_addr().unwrap());
-                    let spotify = Arc::clone(&self.spotify);
-                    let queue = Arc::clone(&self.queue);
 
+                    let mut handler = Arc::clone(&self.handler);
                     thread::spawn(move || {
-                        let mut mpd_handler = MpdRequestHandler::new(spotify, queue);
-                        mpd_handler.handle_client(stream)
+                        handler.handle_client(stream)
                     });
                 }
                 Err(e) => {
@@ -54,47 +63,47 @@ impl MpdServer {
 }
 
 struct MpdRequestHandler {
-    commands: HashMap<&'static str, Box<dyn MpdCommand + 'static>>,
-    spotify: Arc<Spotify>,
-    queue: Arc<Queue>,
+    commands: HashMap<&'static str, Box<dyn MpdCommand + 'static + Sync + Send>>,
+    client: Arc<Client>
 }
 
 impl MpdRequestHandler {
-    pub fn new(spotify: Arc<Spotify>, queue: Arc<Queue>) -> Self {
-        Self {
-            spotify,
-            queue,
+    pub fn new(client: Arc<Client>) -> Self {
+        let mut handler = Self {
+            client,
             commands: HashMap::new(),
-        }
+        };
+        handler.commands = handler.commands();
+
+        handler
     }
 
-    fn commands(&self) -> HashMap<&'static str, Box<dyn MpdCommand>> {
-        let mut commands: HashMap<&'static str, Box<dyn MpdCommand>> = HashMap::new();
-        commands.insert("status", Box::new(StatusCommand::new(Arc::clone(&self.queue))));
-        commands.insert("stats", Box::new(StatsCommand {}));
-        commands.insert("listplaylists", Box::new(ListPlaylistsCommand { spotify: Arc::clone(&self.spotify) }));
-        commands.insert("listplaylistinfo", Box::new(ListPlaylistInfoCommand::new(Arc::clone(&self.spotify))));
-        commands.insert("add", Box::new(AddCommand::new(Arc::clone(&self.queue), Arc::clone(&self.spotify))));
-        commands.insert("addid", Box::new(AddCommand::new(Arc::clone(&self.queue), Arc::clone(&self.spotify))));
-        commands.insert("play", Box::new(PlayCommand::new(Arc::clone(&self.queue))));
-        commands.insert("playid", Box::new(PlayCommand::new(Arc::clone(&self.queue))));
-        commands.insert("pause", Box::new(PauseCommand::new(Arc::clone(&self.queue))));
-        commands.insert("next", Box::new(NextCommand::new(Arc::clone(&self.queue))));
-        commands.insert("prev", Box::new(PrevCommand::new(Arc::clone(&self.queue))));
-        commands.insert("clear", Box::new(ClearCommand::new(Arc::clone(&self.queue))));
-        commands.insert("playlistinfo", Box::new(PlaylistInfoCommand::new(Arc::clone(&self.queue))));
-        commands.insert("plchanges", Box::new(PlaylistInfoCommand::new(Arc::clone(&self.queue))));
-        commands.insert("currentsong", Box::new(CurrentSongCommand::new(Arc::clone(&self.queue))));
-        commands.insert("setvol", Box::new(SetVolCommand::new(Arc::clone(&self.queue))));
-        commands.insert("volume", Box::new(VolumeCommand::new(Arc::clone(&self.queue))));
-        commands.insert("deleteid", Box::new(DeleteIdCommand::new(Arc::clone(&self.queue))));
+    fn commands(&self) -> HashMap<&'static str, Box<dyn MpdCommand + Sync + Send>> {
+        let mut commands: HashMap<&'static str, Box<dyn MpdCommand + Sync + Send>> = HashMap::new();
+        commands.insert("status", Box::new(StatusCommand{}));
+        commands.insert("stats", Box::new(StatsCommand{}));
+        commands.insert("listplaylists", Box::new(ListPlaylistsCommand{}));
+        commands.insert("listplaylistinfo", Box::new(ListPlaylistInfoCommand{}));
+        commands.insert("add", Box::new(AddCommand{}));
+        commands.insert("addid", Box::new(AddCommand{}));
+        commands.insert("play", Box::new(PlayCommand{}));
+        commands.insert("playid", Box::new(PlayCommand{}));
+        commands.insert("pause", Box::new(PauseCommand{}));
+        commands.insert("next", Box::new(NextCommand{}));
+        commands.insert("prev", Box::new(PrevCommand{}));
+        commands.insert("clear", Box::new(ClearCommand{}));
+        commands.insert("playlistinfo", Box::new(PlaylistInfoCommand{}));
+        commands.insert("plchanges", Box::new(PlaylistInfoCommand{}));
+        commands.insert("currentsong", Box::new(CurrentSongCommand{}));
+        commands.insert("setvol", Box::new(SetVolCommand{}));
+        commands.insert("volume", Box::new(VolumeCommand{}));
+        commands.insert("deleteid", Box::new(DeleteIdCommand{}));
 
         commands
     }
 
     #[tokio::main]
-    async fn handle_client(&mut self, mut stream: TcpStream) {
-        self.commands = self.commands();
+    async fn handle_client(&self, mut stream: TcpStream) {
         let welcome = b"OK MPD 0.21.11\n";
         stream.write(welcome).expect("Unable to send OK msg");
 
@@ -167,7 +176,8 @@ impl MpdRequestHandler {
         for (name, mpd_command) in &self.commands {
             if command_name.eq(*name) {
                 let args: Option<regex::Captures<'_>> = RE.captures(&command);
-                return match mpd_command.execute(args).await {
+                let client = Arc::clone(&self.client);
+                return match mpd_command.execute(client, args).await {
                     Ok(cmd) => Ok(cmd),
                     Err(e) => Err(e)
                 };
