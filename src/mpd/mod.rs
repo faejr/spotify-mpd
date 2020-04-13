@@ -80,25 +80,25 @@ impl MpdRequestHandler {
 
     fn commands(&self) -> Vec<Box<dyn MpdCommand + Sync + Send>> {
         let mut commands: Vec<Box<dyn MpdCommand + Sync + Send>> = vec![];
-        commands.push(Box::new(StatusCommand {}));
-        commands.push(Box::new(StatsCommand {}));
-        commands.push(Box::new(ListPlaylistsCommand {}));
-        commands.push(Box::new(ListPlaylistInfoCommand {}));
-        commands.push(Box::new(AddCommand {}));
-        commands.push(Box::new(PlayCommand {}));
-        commands.push(Box::new(PauseCommand {}));
-        commands.push(Box::new(NextCommand {}));
-        commands.push(Box::new(PrevCommand {}));
-        commands.push(Box::new(ClearCommand {}));
-        commands.push(Box::new(PlaylistInfoCommand {}));
-        commands.push(Box::new(CurrentSongCommand {}));
-        commands.push(Box::new(SetVolCommand {}));
-        commands.push(Box::new(VolumeCommand {}));
-        commands.push(Box::new(DeleteIdCommand {}));
-        commands.push(Box::new(UrlHandlersCommand {}));
-        commands.push(Box::new(OutputsCommand {}));
-        commands.push(Box::new(DecodersCommand {}));
-        commands.push(Box::new(TagTypesCommand {}));
+        commands.push(Box::new(StatusCommand));
+        commands.push(Box::new(StatsCommand));
+        commands.push(Box::new(ListPlaylistsCommand));
+        commands.push(Box::new(ListPlaylistInfoCommand));
+        commands.push(Box::new(AddCommand));
+        commands.push(Box::new(PlayCommand));
+        commands.push(Box::new(PauseCommand));
+        commands.push(Box::new(NextCommand));
+        commands.push(Box::new(PrevCommand));
+        commands.push(Box::new(ClearCommand));
+        commands.push(Box::new(PlaylistInfoCommand));
+        commands.push(Box::new(CurrentSongCommand));
+        commands.push(Box::new(SetVolCommand));
+        commands.push(Box::new(VolumeCommand));
+        commands.push(Box::new(DeleteIdCommand));
+        commands.push(Box::new(UrlHandlersCommand));
+        commands.push(Box::new(OutputsCommand));
+        commands.push(Box::new(DecodersCommand));
+        commands.push(Box::new(TagTypesCommand));
 
         commands
     }
