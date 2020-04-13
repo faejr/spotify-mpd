@@ -109,7 +109,7 @@ impl Queue {
                     if current_track == self.queue.read().unwrap().len() {
                         self.stop();
                     } else {
-                        self.play(index);
+                        self.play_id(index);
                     }
                 }
                 Ordering::Greater => {
@@ -136,7 +136,7 @@ impl Queue {
         self.queue.read().unwrap().len()
     }
 
-    pub fn play(&self, index: usize) {
+    pub fn play_id(&self, index: usize) {
         if let Some(track) = &self.queue.read().unwrap().get(index) {
             debug!("Dispatching load");
             self.dispatch(PlayerCommand::Load(track.id.as_ref().unwrap().to_owned()));
@@ -145,6 +145,11 @@ impl Queue {
             debug!("Dispatching play");
             self.dispatch(PlayerCommand::Play);
         }
+    }
+
+    pub fn play(&self) {
+        debug!("Dispatching play");
+        self.dispatch(PlayerCommand::Play);
     }
 
     pub fn toggle_playback(&self) {
@@ -166,7 +171,7 @@ impl Queue {
 
     pub fn next(&self) {
         if let Some(index) = self.next_index() {
-            self.play(index);
+            self.play_id(index);
         } else {
             self.stop();
         }
@@ -174,7 +179,7 @@ impl Queue {
 
     pub fn previous(&self) {
         if let Some(index) = self.previous_index() {
-            self.play(index);
+            self.play_id(index);
         } else {
             self.dispatch(PlayerCommand::Stop);
         }

@@ -230,8 +230,15 @@ impl MpdCommand for PlayCommand {
     }
 
     async fn handle(&self, client: Arc<Client>, args: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error> {
-        let index = usize::from_str(&args.unwrap()[1]).unwrap();
-        client.queue.play(index);
+        match args {
+            Some(arg) => {
+                let index = usize::from_str(&arg[1]).unwrap();
+                client.queue.play_id(index);
+            },
+            None => {
+                client.queue.play();
+            }
+        }
 
         Ok(vec![])
     }
