@@ -6,7 +6,7 @@ use std::sync::Arc;
 use crate::track::Track;
 use std::str::FromStr;
 use crate::respot::PlayerEvent;
-use crate::mpd::Client;
+use crate::mpd::{Client, SubsystemEvent};
 use regex::Captures;
 
 #[async_trait]
@@ -32,7 +32,7 @@ impl MpdCommand for StatusCommand {
         output.push("playlist: 1");
         output.push("mixrampdb: 0.00000");
 
-        let mut output_strings: Vec<String> = output.iter().map(|x| x.to_string()).collect::<Vec<String>>().into();
+        let mut output_strings: Vec<String> = output.iter().map(|x| (*x).to_string()).collect::<Vec<String>>();
         output_strings.push(format!("volume: {}", client.queue.get_volume()));
         let status = client.queue.get_status();
         let playlist_length = client.queue.len();
@@ -69,7 +69,7 @@ impl MpdCommand for StatsCommand {
         output.push("uptime: 0");
         output.push("playtime: 0");
 
-        Ok(output.iter().map(|x| x.to_string()).collect::<Vec<String>>().into())
+        Ok(output.iter().map(|x| (*x).to_string()).collect::<Vec<String>>())
     }
 }
 
@@ -125,31 +125,25 @@ impl MpdCommand for ListPlaylistInfoCommand {
                     None,
                     None,
                 ).await;
-                match playlist_tracks_result {
-                    Ok(playlist_tracks) => {
-                        for playlist_track in playlist_tracks.items
-                        {
-                            match playlist_track.track {
-                                Some(track) => {
-                                    // We don't support local tracks
-                                    if track.is_local {
-                                        break;
-                                    }
-                                    string_builder.push(format!("file: {}", track.id.unwrap()));
-                                    string_builder.push(format!("Last-Modified: {}", track.album.release_date.unwrap()));
-                                    string_builder.push(format!("Artist: {}", self.get_artists(track.artists)));
-                                    string_builder.push(format!("AlbumArtist: {}", self.get_artists(track.album.artists)));
-                                    string_builder.push(format!("Title: {}", track.name));
-                                    string_builder.push(format!("Album: {}", track.album.name));
-                                    let seconds = track.duration_ms / 1000;
-                                    string_builder.push(format!("Time: {}", seconds));
-                                    string_builder.push(format!("duration: {}", seconds));
-                                }
-                                _ => {}
+                if let Ok(playlist_tracks) = playlist_tracks_result {
+                    for playlist_track in playlist_tracks.items
+                    {
+                        if let Some(track) = playlist_track.track {
+                            // We don't support local tracks
+                            if track.is_local {
+                                break;
                             }
+                            string_builder.push(format!("file: {}", track.id.unwrap()));
+                            string_builder.push(format!("Last-Modified: {}", track.album.release_date.unwrap()));
+                            string_builder.push(format!("Artist: {}", self.get_artists(track.artists)));
+                            string_builder.push(format!("AlbumArtist: {}", self.get_artists(track.album.artists)));
+                            string_builder.push(format!("Title: {}", track.name));
+                            string_builder.push(format!("Album: {}", track.album.name));
+                            let seconds = track.duration_ms / 1000;
+                            string_builder.push(format!("Time: {}", seconds));
+                            string_builder.push(format!("duration: {}", seconds));
                         }
                     }
-                    Err(_) => ()
                 }
             }
             _ => {
@@ -234,7 +228,7 @@ impl MpdCommand for PlayCommand {
             Some(arg) => {
                 let index = usize::from_str(&arg[1]).unwrap();
                 client.queue.play_id(index);
-            },
+            }
             None => {
                 client.queue.play();
             }
@@ -315,10 +309,8 @@ impl MpdCommand for PlaylistInfoCommand {
     async fn handle(&self, client: Arc<Client>, _: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error> {
         let mut output = vec![];
         let queue = client.queue.queue.read().unwrap();
-        let mut pos = 0;
-        for track in (*queue).clone() {
+        for (pos, track) in (*queue).clone().into_iter().enumerate() {
             output.extend(track.to_mpd_format(pos));
-            pos = pos + 1;
         }
 
         Ok(output)
@@ -356,6 +348,8 @@ impl MpdCommand for SetVolCommand {
 
         client.queue.set_volume(volume_level.parse::<u16>().unwrap());
 
+        client.event_bus.lock().unwrap().broadcast(SubsystemEvent::Mixer);
+
         Ok(vec![])
     }
 }
@@ -370,10 +364,11 @@ impl MpdCommand for VolumeCommand {
 
     async fn handle(&self, client: Arc<Client>, args: Option<regex::Captures<'_>>) -> Result<Vec<String>, Error> {
         let volume_level_str = &args.unwrap()[1];
-        println!("{:?}", volume_level_str);
         let volume_level = volume_level_str.parse::<i16>().unwrap();
 
         client.queue.set_volume(client.queue.get_volume().wrapping_add(volume_level as u16));
+
+        client.event_bus.lock().unwrap().broadcast(SubsystemEvent::Mixer);
 
         Ok(vec![])
     }
@@ -429,7 +424,7 @@ impl MpdCommand for OutputsCommand {
         output.push("attribute: allowed_formats=");
         output.push("attribute: dop=0");
 
-        Ok(output.iter().map(|x| x.to_string()).collect::<Vec<String>>().into())
+        Ok(output.iter().map(|x| (*x).to_string()).collect::<Vec<String>>())
     }
 }
 
@@ -451,7 +446,7 @@ impl MpdCommand for DecodersCommand {
         output.push("plugin: mpcdec");
         output.push("suffix: mpc");
 
-        Ok(output.iter().map(|x| x.to_string()).collect::<Vec<String>>().into())
+        Ok(output.iter().map(|x| (*x).to_string()).collect::<Vec<String>>())
     }
 }
 
@@ -477,6 +472,23 @@ impl MpdCommand for TagTypesCommand {
         output.push("tagtype: Genre");
         output.push("tagtype: Date");
 
-        Ok(output.iter().map(|x| x.to_string()).collect::<Vec<String>>().into())
+        Ok(output.iter().map(|x| (*x).to_string()).collect::<Vec<String>>())
+    }
+}
+
+pub struct IdleCommand;
+
+#[async_trait]
+impl MpdCommand for IdleCommand {
+    fn get_type(&self) -> Vec<&str> {
+        vec!["idle"]
+    }
+
+    async fn handle(&self, _: Arc<Client>, _: Option<Captures<'_>>) -> Result<Vec<String>, Error> {
+        let mut output = vec![];
+
+        output.push("changed: mixer");
+
+        Ok(output.iter().map(|x| (*x).to_string()).collect::<Vec<String>>())
     }
 }

@@ -188,7 +188,7 @@ impl Queue {
     pub fn get_status(&self) -> PlayerEvent {
         let status = self.status.read().expect("unable to get read lock");
 
-        return (*status).clone();
+        (*status).clone()
     }
 
     pub fn get_duration(&self) -> u32 {

@@ -56,7 +56,6 @@ impl PlayerWorker {
             }
             PlayerCommand::SetVolume(vol) => {
                 self.mixer.set_volume(Self::calc_logarithmic_volume(vol));
-                info!("Setting volume to {}", vol);
             }
             _ => {}
         }
@@ -68,11 +67,12 @@ impl PlayerWorker {
         const IDEAL_FACTOR: f64 = 6.908;
         let normalized_volume = mixer_volume as f64 / std::u16::MAX as f64;
 
-        let mut val = std::u16::MAX;
-        if normalized_volume < 0.999 {
+        let val = if normalized_volume < 0.999 {
             let new_volume = (normalized_volume * IDEAL_FACTOR).exp() / 1000.0;
-            val = (new_volume * std::u16::MAX as f64) as u16;
-        }
+            (new_volume * std::u16::MAX as f64) as u16
+        } else {
+            std::u16::MAX
+        };
 
         debug!("input volume:{} to mixer: {}", volume, val);
 

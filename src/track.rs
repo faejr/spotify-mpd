@@ -19,7 +19,7 @@ pub struct Track {
 }
 
 impl Track {
-    pub fn to_mpd_format(&self, pos: i32) -> Vec<String> {
+    pub fn to_mpd_format(&self, pos: usize) -> Vec<String> {
         let mut output = vec![];
 
         output.push(format!("file: {}", self.id.as_ref().unwrap()));

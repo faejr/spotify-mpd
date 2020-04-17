@@ -1,18 +1,44 @@
 use std::net::{TcpListener, TcpStream};
+use net2::TcpStreamExt;
 use std::thread;
-use std::io::{Write, BufReader, BufRead};
-use crate::mpd::mpd_commands::*;
+use std::io::{Write, BufReader, BufRead, Read};
 use rspotify::client::Spotify;
 use regex::Regex;
 use anyhow::{Result, Error};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+use core::fmt;
+use bus::{Bus, BusReader};
+
+use crate::mpd::mpd_commands::*;
 use crate::queue::Queue;
 
 mod mpd_commands;
 
+#[derive(Debug, Clone, PartialOrd, Ord, PartialEq, Eq)]
+pub enum SubsystemEvent {
+    Database,
+    Update,
+    StoragePlaylist,
+    Playlist,
+    Mixer,
+    Output,
+    Options,
+    Partition,
+    Sticker,
+    Subscription,
+    Message,
+}
+
+impl fmt::Display for SubsystemEvent {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
 pub struct Client {
     spotify: Arc<Spotify>,
     queue: Arc<Queue>,
+    event_bus: Arc<Mutex<Bus<SubsystemEvent>>>,
 }
 
 impl Client {
@@ -20,20 +46,21 @@ impl Client {
         Self {
             spotify,
             queue,
+            event_bus: Arc::new(Mutex::new(Bus::new(100))),
         }
     }
 }
 
 pub(crate) struct MpdServer {
     host: String,
-    handler: Arc<MpdRequestHandler>,
+    client: Arc<Client>,
 }
 
 impl MpdServer {
     pub fn new(host: String, spotify: Arc<Spotify>, queue: Arc<Queue>) -> Self {
         Self {
             host,
-            handler: Arc::new(MpdRequestHandler::new(Arc::new(Client::new(spotify, queue)))),
+            client: Arc::new(Client::new(spotify, queue)),
         }
     }
 
@@ -46,9 +73,10 @@ impl MpdServer {
                 Ok(stream) => {
                     println!("New connection: {}", stream.peer_addr().unwrap());
 
-                    let handler = Arc::clone(&self.handler);
+                    let mut handler = MpdRequestHandler::new(Arc::clone(&self.client));
+                    let event_receiver = self.client.event_bus.lock().unwrap().add_rx();
                     thread::spawn(move || {
-                        handler.handle_client(stream)
+                        handler.handle_client(stream, event_receiver);
                     });
                 }
                 Err(e) => {
@@ -62,104 +90,153 @@ impl MpdServer {
     }
 }
 
+lazy_static! {
+    static ref COMMANDS: Vec<Box<dyn MpdCommand + Sync + Send>> = vec![
+        Box::new(StatusCommand),
+        Box::new(StatsCommand),
+        Box::new(ListPlaylistsCommand),
+        Box::new(ListPlaylistInfoCommand),
+        Box::new(AddCommand),
+        Box::new(PlayCommand),
+        Box::new(PauseCommand),
+        Box::new(NextCommand),
+        Box::new(PrevCommand),
+        Box::new(ClearCommand),
+        Box::new(PlaylistInfoCommand),
+        Box::new(CurrentSongCommand),
+        Box::new(SetVolCommand),
+        Box::new(VolumeCommand),
+        Box::new(DeleteIdCommand),
+        Box::new(UrlHandlersCommand),
+        Box::new(OutputsCommand),
+        Box::new(DecodersCommand),
+        Box::new(TagTypesCommand),
+    ];
+}
+
 struct MpdRequestHandler {
-    commands: Vec<Box<dyn MpdCommand + 'static + Sync + Send>>,
     client: Arc<Client>,
+    idle: bool,
+    subsystems_changed: Vec<SubsystemEvent>
 }
 
 impl MpdRequestHandler {
     pub fn new(client: Arc<Client>) -> Self {
-        let mut handler = Self {
+        Self {
             client,
-            commands: vec![],
-        };
-        handler.commands = handler.commands();
-
-        handler
-    }
-
-    fn commands(&self) -> Vec<Box<dyn MpdCommand + Sync + Send>> {
-        let mut commands: Vec<Box<dyn MpdCommand + Sync + Send>> = vec![];
-        commands.push(Box::new(StatusCommand));
-        commands.push(Box::new(StatsCommand));
-        commands.push(Box::new(ListPlaylistsCommand));
-        commands.push(Box::new(ListPlaylistInfoCommand));
-        commands.push(Box::new(AddCommand));
-        commands.push(Box::new(PlayCommand));
-        commands.push(Box::new(PauseCommand));
-        commands.push(Box::new(NextCommand));
-        commands.push(Box::new(PrevCommand));
-        commands.push(Box::new(ClearCommand));
-        commands.push(Box::new(PlaylistInfoCommand));
-        commands.push(Box::new(CurrentSongCommand));
-        commands.push(Box::new(SetVolCommand));
-        commands.push(Box::new(VolumeCommand));
-        commands.push(Box::new(DeleteIdCommand));
-        commands.push(Box::new(UrlHandlersCommand));
-        commands.push(Box::new(OutputsCommand));
-        commands.push(Box::new(DecodersCommand));
-        commands.push(Box::new(TagTypesCommand));
-
-        commands
+            idle: false,
+            subsystems_changed: vec![]
+        }
     }
 
     #[tokio::main]
-    async fn handle_client(&self, mut stream: TcpStream) {
+    async fn handle_client(&mut self, mut stream: TcpStream, mut event_receiver: BusReader<SubsystemEvent>) {
         let welcome = b"OK MPD 0.21.11\n";
-        stream.write(welcome).expect("Unable to send OK msg");
+        stream.write_all(welcome).expect("Unable to send OK msg");
+        self.enable_timeout(&mut stream);
 
         loop {
-            let command_list = self.get_command_list(&mut stream);
-
-            if command_list.len() > 0 {
-                self.run_commands(&mut stream, command_list).await;
+            if let Ok(event) = event_receiver.try_recv() {
+                self.subsystems_changed.push(event);
+                if self.idle {
+                    self.send_subsystem_changed(&mut stream);
+                }
             }
-        }
+
+            let mut command_list = self.get_command_list(&mut stream);
+
+            if !command_list.is_empty() {
+                let first_command = command_list.first().unwrap().to_owned();
+                if first_command == "idle" {
+                    println!("-> {:?}", command_list);
+                    if !self.subsystems_changed.is_empty() {
+                        self.send_subsystem_changed(&mut stream);
+                    } else {
+                        self.idle = true;
+                        self.disable_timeout(&mut stream);
+                    }
+                    command_list.remove(0);
+                } else if first_command == "noidle" {
+                    self.idle = false;
+                    self.enable_timeout(&mut stream);
+                }
+                if !self.idle {
+                    self.run_commands(&mut stream, command_list).await;
+                }
+            }
+        } // Loop
+    }
+
+    fn enable_timeout(&mut self, stream: &mut TcpStream) {
+        stream.set_write_timeout_ms(Some(6000)).unwrap();
+    }
+
+    fn disable_timeout(&mut self, stream: &mut TcpStream) {
+        stream.set_write_timeout_ms(None).unwrap();
+    }
+
+    fn send_subsystem_changed(&mut self, stream: &mut TcpStream) {
+        self.subsystems_changed.sort();
+        self.subsystems_changed.dedup();
+        let subsystems: Vec<String> = self.subsystems_changed.iter().map(|e| e.to_string().to_lowercase()).collect();
+        stream.write_all(format!("changed: {}\nOK\n", subsystems.join(", ")).as_bytes()).unwrap();
+        self.subsystems_changed.clear();
+        self.idle = false;
+        assert!(self.subsystems_changed.is_empty());
+        assert!(!self.idle);
+        self.enable_timeout(stream);
+        println!("<- OK (Subsystems changed)");
     }
 
     fn get_command_list(&self, stream: &mut TcpStream) -> Vec<String> {
-        let mut reader = BufReader::new(stream);
-        let mut response = String::new();
         let mut command_list = vec![];
-        reader.read_line(&mut response).expect("could not read");
-        if response.trim() == "command_list_begin" {
-            while response.trim() != "command_list_end" {
-                response = String::new();
-                reader.read_line(&mut response).expect("could not read");
-                if response.trim() != "command_list_end" {
-                    command_list.push(response.trim().to_owned());
+        if let Some(mut command) = MpdRequestHandler::get_cmd(stream) {
+            if command == "command_list_start" {
+                while command != "command_list_end" {
+                    if let Some(command) = MpdRequestHandler::get_cmd(stream) {
+                        if command != "command_list_end" {
+                            command_list.push(command);
+                        }
+                    }
                 }
+            } else {
+                command_list.push(command);
             }
-        } else if response.len() > 0 && response.trim() != "idle" {
-            command_list.push(response.trim().to_owned());
         }
 
         command_list
+    }
+
+    fn get_cmd(stream: &mut TcpStream) -> Option<String>{
+        let mut response = String::new();
+        let mut buf_reader = BufReader::new(stream);
+        buf_reader.read_line(&mut response).expect("could not read");
+
+        Some(response.trim().to_owned())
     }
 
     async fn run_commands(&self, stream: &mut TcpStream, command_list: Vec<String>) {
         let mut output = vec![];
         for command in command_list {
             println!("-> {:?}", command);
-            match self.execute_command(command).await {
-                Ok(result) => output.extend(result),
-                _ => {}
+            if let Ok(result) = self.execute_command(command).await {
+                output.extend(result);
             }
             if self.has_error(&output) {
                 break;
             }
         }
         if self.has_error(&output) {
-            println!("< {}", output.last().unwrap());
+            println!("<- {}", output.last().unwrap());
         } else {
             output.push("OK\n".to_owned());
-            println!("< OK");
+            println!("<- OK");
         }
 
-        stream.write(output.join("\n").as_bytes()).unwrap();
+        stream.write_all(output.join("\n").as_bytes()).unwrap();
     }
 
-    fn has_error(&self, output: &Vec<String>) -> bool {
+    fn has_error(&self, output: &[String]) -> bool {
         for s in output {
             if s.starts_with("ACK") {
                 return true;
@@ -178,7 +255,7 @@ impl MpdRequestHandler {
             .split_whitespace()
             .next()
             .unwrap_or("");
-        for mpd_command in &self.commands {
+        for mpd_command in COMMANDS.iter() {
             if mpd_command.get_type().contains(&command_name) {
                 let args: Option<regex::Captures<'_>> = RE.captures(&command);
                 let client = Arc::clone(&self.client);
@@ -192,13 +269,13 @@ impl MpdRequestHandler {
 
         let mut output = vec![];
         if command == "commands" {
-            for mpd_command in &self.commands {
+            for mpd_command in COMMANDS.iter() {
                 for t in mpd_command.get_type() {
                     output.push(format!("command: {}", t));
                 }
             }
         }
 
-        Ok(output.iter().map(|x| x.to_string()).collect::<Vec<String>>().into())
+        Ok(output)
     }
 }

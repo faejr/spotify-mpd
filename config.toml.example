@@ -1,5 +1,6 @@
 [spotify]
 client_id="f8edeb3f6c3c4d6a842a223ddfd20f4d" # Spotify MPD client id.
+client_secret=""
 username=""
 password=""
 port=8080
